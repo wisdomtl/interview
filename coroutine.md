@@ -56,13 +56,17 @@ io 属于io型：线程被阻塞时，cpu是闲着。
 
 
 ## 异常处理
-在 coroutineScope中，异常是向上传播的，只要任意一个子协程发生异常，整个scope都会执行失败，并且其余的所有子协程都会被取消掉；
+在 coroutineScope中，异常是向上传播的，只要任意一个子协程发生异常，它会把这个异常逐级向上传播，直到根协程，所以在子协程中使用ExceptionHandler是无效的，整个scope都会执行失败，并且其余的所有子协程都会被取消掉；
 在 supervisorScope中，异常是向下传播的，一个子协程的异常不会影响整个 scope的执行，也不会影响其余子协程的执行；（重写了childCancelled并返回false）
 CancellationException 异常总是被忽略
 
 
 ## 取消协程
-每个启动的协程都会返回一个job，调用 job.cancel()会让job处于canceling状态，然后在下一个挂起点抛出CancellationException ,如果协程中没有挂起点，则协程不能被取消。因为每个suspend 方法都会检查job是否活跃，若不活跃则抛出CancellationException ，这个异常只是给上层一次关闭资源的机会，可以通过try-catch 捕获
+每个启动的协程都会返回一个job，调用 job.cancel()会让job处于canceling状态，然后在下一个挂起点抛出CancellationException ,如果协程中没有挂起点，则协程不能被取消。因为每个suspend 方法都会检查job是否活跃，若不活跃则抛出CancellationException ，这个异常只是给上层一次关闭资源的机会，可以通过try-catch 捕获。
+
+特别的，suspendCoroutine 创建的suspend 方法不会检测job是否活跃，所以他无法被cancel
+
+另外如果把suspend 方法 try-catch 了，它抛出的CancellationException也会被捕获，导致协程无法被取消，解决方案是在catch中重新抛出CancellationException
 
 对于没有挂起的协程，需要通过while(isActive)来检查job是否被取消 或者 yield()
 
