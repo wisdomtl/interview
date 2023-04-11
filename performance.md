@@ -102,15 +102,15 @@ android内存泄漏就是生命周期长的对象持有了生命周期较短对�
 ## anr分析
 - 是什么类型的anr
 KeyDispatchTimeout：5秒内未响应输入事件
-BroadcastTimeout：广播onReceive()函数运行在主线程中，在特定的时间（10s）内，后台广播60s无法完成处理。
-ServiceTimeout：前台服务20秒 ，后台服务200s
-ContentProvider：publish 在10秒内未完成
+BroadcastTimeout：广播onReceive()函数运行在主线程中，在特定的时间（10s）内，后台广播60s无法完成处理。在onReceive() 中 sleep会timeout
+ServiceTimeout：前台服务20秒 ，后台服务200s,在service.onCreate()中sleep会anr,ActiveServices 埋下炸弹，当ActivityThread中handler收到CREATE_SERVICE消息时,拆炸弹再回调service.oncreate()
+ContentProvider：publish 在10秒内未完成,所以在provider.onCreate() 中sleep 不会anr
 - anr的原因是主线程任务在规定时间内没有完成，肯定是因为有耗时操作
 - data/anr/trace文件：发生anr的调用栈
 - 如果非anr线程cpu使用率非常高，则可能是因为没有被分配cpu执行时间导致anr
 - 如果anr进程cpu使用率非常高，则可能是因为不合理代码占用cpu资源
 - IOwait很高时说明有io操作
-- BlockCanary 利用主线程消息队列的日志打印监控卡顿，通过Looper.setMessageLogging()监听每个消息的打印，分发消息前和消息处理完毕后都会打印，blockCanary会计算这两次打印的时间差，如果时间差超出阈值则发消息到另一个线程入捕获现场信息（调用栈，cpu信息）
+- BlockCanary 利用主线程消息队列的日志打印监控卡顿，通过Looper.setMessageLogging(printer)监听每个消息的打印，分发消息前和消息处理完毕后都会打印，blockCanary会计算这两次打印的时间差，如果时间差超出阈值则发消息到另一个线程入捕获现场信息（调用栈，cpu信息），设置 Printer 的方案，随着 Looper 的 for 循环不断执行，会导致字符串频繁拼接，产生大量临时对象，有可能加重 App 的 GC 频率，导致内存抖动
 - BlockCanary 
 	+ 不能检测到取消息的卡顿，只能检测到处理消息的卡顿，
 	+ 不能检测到 IdleHandler.queueIdle() 卡顿，因为只能监听消息处理，idleHandler 是在没有消息处理时，才会触发，通过装饰者模式包装一些IdleHandler接口（或者通过修改字节码，将所有IdleHandler换成自定义的），在原有逻辑外面包一层监控逻辑（通过向ThreadHandler抛一个延迟处理消息用于打印调用栈，带queueIdle逻辑执行完后移除消息）
@@ -146,6 +146,9 @@ ContentProvider：publish 在10秒内未完成
 4. 线程数量超过限制
 5. 虚拟内存不足
 
+## 绘制性能
+布局嵌套性能差是因为父控件有可能多次测量孩子，嵌套层次对性能的影响是指数级的（父亲是wrap_content,孩子是match_parent，父亲先以0强制测量下孩子，然后选取孩子中最宽的那个最为自己宽度，然后再去测量下孩子），compose只允许测量一次
+
 
 ## 缩包
 1. 只保留一张3倍图（在低分辨率手机上图片会根据像素密度裁剪）
@@ -156,6 +159,7 @@ ContentProvider：publish 在10秒内未完成
 # 启动优化
 1. 视觉优化：windowBackground设置一张图片（成为StartingWindow的Decorview的背景）
 2. 初始化任务优化：可以异步初始化的，放异步线程初始化，必须在主线程但可以延迟初始化的，放在IdleHandler中，
-3. ContentProvider 优化：去掉没有必要的contentProvider
+3. ContentProvider 优化：去掉没有必要的contentProvider，或者将多个ContentProvider通过startup进行串联成一个，这样可以减少contentprovider对象创建的耗时，ContentProvider 即使在没有被调用到，也会在启动阶段被自动实例化并执行相关的生命周期。在进程的初始化阶段调用完 Application 的 attachBaseContext 方法后，会再去执行 installContentProviders 方法，对当前进程的所有 ContentProvider 进行 install
 4. 缩小main dex：MultidexTransform 解析所有manifest中声明的组件生成manifest_keep.txt，再查找manifest_keep.txt中所有类的直接引用类，将其保存在maindexlist.txt中，最后将maindexlist.txt中的所有class编译进main.dex。multiDex优化，自行解析AndroidManifest，自定义main.dex生成逻辑，将和启动页相关的代码分在主dex中，减小主dex大小，加快加载速度。
-5. multiDex.install 异步化，在4.4以下的机型MultiDex.install()耗时。它会先解压apk，遍历其中的dex文件，然后压缩成对应的zip文件（这是第一次的逻辑，第二次启动时已经有zip文件则直接读取。）然后通过反射，将其余的dex追加到DexPathList的尾部。这个过程中的压缩成zip可以免去，以提升速度。可以将这个过程放在单独的一个进程中做（在attachBaseContext中，开启一个死循环等待multidex完成），而且该进程有一个activity界面展示loading，但加载完毕后通知主进程，在跳转到闪屏页
+5. multiDex.install 优化：
+	- 4.x使用Dalvik 虚拟机，所以只能执行经过优化后的 odex 文件，为了提升应用安装速度，其在安装阶段仅会对应用的首个 dex 优化成odex并加载到PathClassLoader的dexPathListz中。对于非首个 dex 其会在首次运行调用 MultiDex.install 进行优化并加载到classloader中，而这个优化是非常耗时的，这就造成了 4.x 设备上首次启动慢的问题，MultiDex.install()耗时。它会先解压apk，遍历其中的dex文件，然后压缩成对应的zip文件（这是第一次的逻辑，第二次启动时已经有zip文件则直接读取。），然后对zip文件进行odex优化，最终返回一个DexFile，再将dexfile追加到PathClassLoader的pathList尾部。将install异步化，多线程话，改变加载流程，使得首次不需要加载odex而是直接加载dex，先正常启动，然后后台起一个单独进程慢慢做odex优化
