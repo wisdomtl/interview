@@ -100,12 +100,13 @@ android内存泄漏就是生命周期长的对象持有了生命周期较短对�
 6. 通过ComponentCallback2 监听内存吃紧，进行内存缓存的释放。
 
 ## anr分析
-- 是什么类型的anr
-KeyDispatchTimeout：5秒内未响应输入事件
+KeyDispatchTimeout：5秒内未响应输入事件,只有当新的点击事件到来时，发现超时事件才会触发anr
 BroadcastTimeout：广播onReceive()函数运行在主线程中，在特定的时间（10s）内，后台广播60s无法完成处理。在onReceive() 中 sleep会timeout
-ServiceTimeout：前台服务20秒 ，后台服务200s,在service.onCreate()中sleep会anr,ActiveServices 埋下炸弹，当ActivityThread中handler收到CREATE_SERVICE消息时,拆炸弹再回调service.oncreate()
+ServiceTimeout：前台服务20秒 ，后台服务200s,在service.onCreate()，onstart,onbind,onrebind,onUnbind()中sleep都会会anr,ActiveServices 埋下炸弹，当ActivityThread中handler收到CREATE_SERVICE消息时,拆炸弹再回调service.oncreate()
 ContentProvider：publish 在10秒内未完成,所以在provider.onCreate() 中sleep 不会anr
-- anr的原因是主线程任务在规定时间内没有完成，肯定是因为有耗时操作
+activity生命周期回调中sleep不会发生anr，但是此时触发触摸事件就会发生anr
+- anr的原因在规定时间内没有完成指定任务，anr监控是通过延迟消息埋炸弹，拆炸弹，没拆成功则引爆
+- anr触发原点ActivityManagerService.appNotResponding()，ams会发送消息到主线程消息队列触发弹窗
 - data/anr/trace文件：发生anr的调用栈
 - 如果非anr线程cpu使用率非常高，则可能是因为没有被分配cpu执行时间导致anr
 - 如果anr进程cpu使用率非常高，则可能是因为不合理代码占用cpu资源
@@ -147,7 +148,7 @@ ContentProvider：publish 在10秒内未完成,所以在provider.onCreate() 中s
 5. 虚拟内存不足
 
 ## 绘制性能
-布局嵌套性能差是因为父控件有可能多次测量孩子，嵌套层次对性能的影响是指数级的（父亲是wrap_content,孩子是match_parent，父亲先以0强制测量下孩子，然后选取孩子中最宽的那个最为自己宽度，然后再去测量下孩子），compose只允许测量一次
+布局嵌套性能差是因为父控件有可能多次测量孩子，嵌套层次对性能的影响是指数级的（父亲是wrap_content,孩子是match_parent，父亲先以0强制测量下孩子，然后选取孩子中最宽的那个最为自己宽度，然后再去测量下孩子），compose只允许测量一次（固有特性测量，先查询子项，然后在进行实际测量）
 
 
 ## 缩包

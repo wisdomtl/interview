@@ -3,11 +3,11 @@
 ## Binder
 - Linux将内存空间 = 内核空间（操作系统+驱动）+用户空间（应用程序）为了保证内核安全，它们是隔离的。内核空间可访问所有内存空间，而用户空间不能访问内核空间。
 - 用户程序只能通过系统调用陷入内核态，从而访问内核空间。系统调用主要通过 copy_to_user() 和 copy_from_user() 实现，copy_to_user() 用于将数据从内核空间拷贝到用户空间，copy_from_user() 用于将数据从用户空间拷贝到内核空间。
-- 安全性好：为发送方添加UID/PID身份信息
+- 安全性好：为发送方在内核中添加UID/PID身份信息（无法篡改）
+- 稳定性高：基于C/S架构
 - 性能更佳：传输过程只要一次数据拷贝，而Socket、管道等传统IPC手段都至少需要两次数据拷贝
-，Android将Binder driver挂载为动态内存（LKM：Loadable Kernel Module），通过它以mmap方式将内核空间与接收方用户空间进行内存映射（用户空间一块虚拟内存地址和内核空间虚拟内存地址指向同一块物理地址），这样就只需发送方将数据拷贝到内核就好了。
-- server向binder驱动注册服务，将别名传递给binder驱动，驱动发现是新binder则新建binder结点，再把binder别名和引用传递给 ServiceManager 保存在一张映射表进行注册，client通过别名查映射表，并获取binder引用，然后就能像调普通方法一样调用binder 方法。
-- android 系统启动时，SystemServer向binder驱动注册ServiceManager，所有用户进程的0号引用就是 ServiceManager
+，Android将Binder driver挂载为动态内存（LKM：Loadable Kernel Module）Android 系统就可以通过动态添加一个内核模块运行在内核空间，用户进程之间通过这个内核模块作为桥梁来实现通信，通过它以mmap方式将内核空间与接收方用户空间进行内存映射（用户空间一块虚拟内存地址和内核空间虚拟内存地址指向同一块物理地址）。通常Binder驱动将接收方mmap到内核，这样就只需发送方将数据拷贝到内核就好了。
+- Binder驱动在跨进程通信中，就像路由一样，负责传递binder，
 - Binder 通信是不同进程中线程之间的通信，客户端线程会将线程优先级传递给服务端，服务端会其专门的服务线程。
 - 一个服务会生成一个binder_node结点，有一个binder_node_lock，所以多个客户端请求同一个oneway服务时不能发生并行，会进队列排队
 - 通过Binder实现的跨进程通信是c/s模式的，客户端通过远程服务的本地代理像服务端发请求，服务端处理请求后将结果返回给客户端
@@ -23,6 +23,11 @@
 - 生命周期回调都是 AMS 通过 Binder 通知应用进程调用的
 - oneway表示异步调用，发起RPC之前不会构建parcel reply
 - in 表示客户端向服务端传送值并不关心值的变化，out表示服务端向客户端返回值
+
+### ServiceManager
+- 在跨进程通信中，就像dns查询服务器一样，它维护了binder名和binder引用的映射关系，输入binder名输出binder引用，server向binder驱动注册服务，将别名传递给binder驱动，驱动发现是新binder则新建binder结点，再把binder别名和引用传递给 ServiceManager 保存在一张映射表进行注册，client通过别名查映射表，并获取binder引用，这是一个 binderProxy，客户单会生成一个本地代理来代理binderProxy，然后就能像调普通方法一样调用binder 方法。
+- android 系统启动时，SystemServer向binder驱动注册ServiceManager，所有用户进程的0号引用就是 ServiceManager
+
 
 ## mmap
 Linux io= 标准io + 直接io + mmap
@@ -122,7 +127,7 @@ string是final类型的char数组，表示引用不会改变
 	2. CS:consumer super 实现逆变效果：泛型类只消费泛型，即泛型只出现在类方法的参数位，kotlin中用in表示，java用<? super T>表示
 - 类型参数的父子关系是否会延续到外部类上，若延续的叫协变，否则父子关系转向了，这叫逆变，若没有父子关系则叫不变型 ，泛型是不变型
 - 类型擦除：为了兼容1.5以前的代码，即编译后的泛型都变成了 Object或者上界，然后在使用的地方进行类型强转，所以泛型只存在于编译前，所以是伪泛型。
-- Signature：被擦除的类型信息会记录到~，反射时从~中获取类型
+- Signature：被擦除的类型信息会记录到~，虽然编译时擦除了类型，但运行时反射时从~中获取类型
 - 当子类覆盖或者实现父类方法时，方法的形参要比父类方法的更为宽松；
 - 当子类覆盖或者实现父类方法时，方法的返回值要比父类的更严格。
 - 如果在编译的时候就保存了泛型类型到字节码中，那么在运行时我们就可以通过反射获取到，如果在运行时传入实际的泛型类型，这个时候就会被擦除，反射获取不到当前传入的泛型实际类型
@@ -367,6 +372,7 @@ GC_EXPLICIT: 表示是应用程序调用System.gc、VMRuntime.gc接口或者收�
 其中前三种是在分配对象时触发的
 - 分为串行gc和并行gc
 - 串行gc开始时会将非gc线程都暂停，直到gc完成
+
 ## art虚拟机
 - Non Moving Space：存放只读属性，永久数据
 - Zygote Space：zygote和应用共享
@@ -377,11 +383,14 @@ GC_EXPLICIT: 表示是应用程序调用System.gc、VMRuntime.gc接口或者收�
 - 为大对象单独分配内存区域，避免造成堆的gc
 - 后台默默地做内存整理moving collector，减少碎片，dvm使用mark and sweep 导致内存碎片。
 - 并行gc被分割成多个子任务，由线程池执行，充分利用多核性能，让gc过程更高效
+
 ## JIT ART
 - dalvik每次应用启动都会发生jit，将dex字节码转换成机器码
 - ART和Dalvik都算是一种Android运行时环境，或者叫做虚拟机，用来解释dex类型文件。但是ART是安装时解释（AOT），会占用额外的存储空间，安装很慢，Dalvik是运行时解释（JIT），即每次启动都会编译，启动慢，耗电
 - JIT对于使用频率高的代码编译成机器码
+
 ## dalvik虚拟机，jvm
+- 虚拟机的目的是跨平台，即使在不同的硬件和操作系统上，也可以运行相同的应用程序。虚拟机可以将 Java 代码编译成字节码，然后在运行时解释执行
 - 在Android 5.0以下，使用的是Dalvik虚拟机，5.0及以上，则使用的是ART虚拟机
 - dex适用于低内存及速度有限的设备，dex文件比class文件体积小（消除了冗余信息，将多个class文件相同的部分统一存一份）
 - dalvik虚拟机内存空间
@@ -398,6 +407,7 @@ GC_EXPLICIT: 表示是应用程序调用System.gc、VMRuntime.gc接口或者收�
 3. 将class文件转换为dex文件
 4. 将资源和dex打包到apk
 5. 签名
+6. 对齐
 
 ## 广播
 - 是一种用观察者模式实现的异步通信
@@ -512,6 +522,7 @@ public boolean dispatchTouchEvent(MotionEvent ev) {
 - 消息池：链式结构，静态，所有消息共用，取消息时从头部取，消息分发完毕后头部插入
 - 消息按时间先后顺序插入到链表结构的消息队列中，最旧的消息在队头，最新的消息在队尾
 - Looper通过无限循环从消息队列中取消息并分发给其对应的Handler，并回收消息
+- Looper.prepare()新建一个looper对象并设置给threadLocal
 - Android消息机制共有三种消息处理方式，它们是互斥的，优先级从高到低分别是1. Runnable.run() 2. Handler.callback 3. 重载Handler.handleMessage()
 - 若消息队列中消息分发完毕,则调用natviePollOnce()阻塞当前线程并释放cpu资源,当有新消息插入时或者超时时间到时线程被唤醒
 - idleHandler 是在消息队列空闲时会被执行的逻辑,每拿取一次消息有且仅有一次机会执行.通过queueIdle()返回true表示每次取消息时都会执行,否则执行一次就会被移出
@@ -650,8 +661,7 @@ analyze apk---res asset lib dex 大小
 - 一共有五个进程优先级
 1、 前台进程(Foreground process)：该进程中有前台组件正在运行，oom_adj：FOREGROUND_APP_ADJ=0
 	 - 正在交互的Activity，Activity.onResume()
-	 - 前台服务
-	 - Service.onCreate() onStart()正在执行
+	 - 前台服务Service.onCreate() onStart()正在执行
 	 - Receiver.onReceive()正在执行
 2、 可见进程(Visible process) VISIBLE_APP_ADJ = 1
 	- 正在交互的Activity，Activity.onPause()
@@ -691,8 +701,8 @@ analyze apk---res asset lib dex 大小
 
 
 ## 恢复Activity数据
-1. onSaveInstanceState()+onRestoreInstanceState():会进行序列化到磁盘，耗时，杀进程依然存在
-2. Fragment+setRetainInstance()：数据保存在内存，配置发生变化时数据依然存在，但杀进程后数据不存在
+1. onSaveInstanceState()+onRestoreInstanceState():会进行序列化到磁盘，耗时，杀进程依然存在，适合轻量级数据。
+2. Fragment+setRetainInstance()：使fragment绕过宿主activity的销毁重建，数据保存在内存，配置发生变化时数据依然存在，但杀进程后数据不存在
 3. onRetainNonConfigurationInstance() + getLastNonConfigurationInstance():数据保存在内存，配置发生变化时数据依然存在，但杀进程后数据不存在
 
 

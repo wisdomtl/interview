@@ -76,7 +76,7 @@ SurfaceView做帧大图帧动画，优化内存和流畅度：
 - 手写匿名共享内存：在服务端自定义Binder实例，并在onTransact()方法中构建MemoryFile，然后反射获取FileDescriptor，并将其写入reply parcel。客户端绑定服务时，通过reply获取FileDescriptor。
 
 ## 界面卡顿
--刷新率是屏幕每秒钟刷新次数,即每秒钟去buffer中拿帧数据的次数, 帧率是GPU每秒准备帧的速度，即gpu每秒向buffer写数据的速度,
+- 刷新率是屏幕每秒钟刷新次数,即每秒钟去buffer中拿帧数据的次数, 帧率是GPU每秒准备帧的速度，即gpu每秒向buffer写数据的速度,
 - 卡顿是因为掉帧，掉帧是因为写buffer的速度慢于取buffer的速度（每秒60帧），每隔16.6ms显示设备就会去buffer中取下一帧的内容，没有取到就掉帧了
 - 当扫描完一个屏幕后，设备需要重新回到第一行以进入下一次的循环，此时有一段时间空隙，称为VerticalBlanking Interval(VBI), Vsync就是 VBI 发生时产生的垂直脉冲,这是最好的交换双缓冲的时间点,交换双缓冲是交换内存地址，瞬间就完成了
 - 一帧的显示要经历，cpu计算画多大，画在哪里，画什么，然后gpu渲染计算结果存到buffer，显示器每隔一段时间从buffer取帧。若没有取到帧，只能继续显示上一帧。
@@ -151,13 +151,24 @@ SurfaceView做帧大图帧动画，优化内存和流畅度：
 - 系统服务是通过反射构造器创建的，然后被添加到SystemServiceManager.mServices中保存，最后调用了onStart()启动服务
 
 ## 应用启动过程
-如果每个应用程序在启动之时都需要单独运行和初始化一个虚拟机，会大大降低系统性能，因此Android首先创建一个zygote虚拟机，然后通过它孵化出其他的虚拟机进程，进而共享虚拟机内存和框架层资源（fork比创建更高效），这样大幅度提高应用程序的启动和运行速度
+1. launcher进程向SystemServer进程请求启动新应用的主activity
+2. SystemServer进程创建出对应activityRecord对象
+3. 如果界面隶属于现有task，则压栈，否则新建task栈
+4. SystemServer要求launcher界面onPause
+5. 启动一个starting window
+6. 检测新起activity对应的应用进程是否已创建，若没有则让zygote fork一个新进程
+7. 应用进程中创建ActivityThread.main(),开启主线程消息循环
+8. SystemServer给应用进程主线程发消息要求创建并启动主activity
+9. 通过跨进程通信触发activity的各种生命周期回调
+10. 到onResume的时候会将顶层视图添加到窗口，并构建viewrootimpl，以此触发一次view树遍历
+
+### 版本1
 1. 创建一个name为“zygote”的Socket服务端，监听socket，用于等待AMS的请求Zygote来创建新的进程；
 2. 预加载类和资源，包括drawable、color、OpenGL和文本连接符资源等，保存到Resources一个全局静态变量中，下次读取系统资源的时候优先从静态变量中查找；
 3. 启动SystemServer进程；
 4. 通过runSelectLoop(）方法，开启一个死循环，等待AMS的请求创建新的应用程序进程。
 
-
+### 版本2
 1. ams 通知zygote fork一个app进程
 2. 初始化Binder，以进程pid在设备上创建/proc/pid目录，在该目录上可以读取进程binder线程池，内核缓冲区
 3. Binder驱动为该进程在内核空间创建一个binder_proc结构体，并放到队列中，以记录多少个进程在使用binder驱动
@@ -215,9 +226,7 @@ token建立了应用进程Activity和系统进程ActivityRecord的关联，在Ac
 
 5. 将待启动Activity设置为焦点Activity
 通过IActivityManager.setFocusedActivityLocked()
-## activity冷启动
-　　1、冷启动：当启动应用时，后台没有该应用的进程，这时系统会重新创建一个新的进程分配给该应用，这个启动方式就是冷启动。
-　　2、热启动：当启动应用时，后台已有该应用的进程（例：按back键、home键，应用虽然会退出，但是该应用的进程是依然会保留在后台，可进入任务列表查看），所以在已有进程的情况下，这种启动会从已有的进程中来启动应用，这个方式叫热启动。
+
 
 ## Activity调度
 - ActivityStackSupervisor管理多个ActivityDisplay，一个ActivityDisplay中包含着多个ActivityStack，当前只有一个获得焦点的ActivityStack被显示
@@ -251,6 +260,7 @@ token建立了应用进程Activity和系统进程ActivityRecord的关联，在Ac
 - init进程通过 service 命令创建
 - 是第一个art虚拟机
 - 通过socket方式与其他进程通信
+- 如果每个应用程序在启动之时都需要单独运行和初始化一个虚拟机，会大大降低系统性能，因此Android首先创建一个zygote虚拟机，然后通过它孵化出其他的虚拟机进程，进而共享虚拟机内存和框架层资源（fork比创建更高效），这样大幅度提高应用程序的启动和运行速度
 - zygote会提前加载一个资源，共享库，jni函数，systemServer从zygote孵化出来后可以直接使用这些资源
 - zygote.main(){
 	1. 启动AndroidRuntime ，就是Dalvik虚拟机
@@ -271,7 +281,7 @@ token建立了应用进程Activity和系统进程ActivityRecord的关联，在Ac
 		- IWindow实例也是在ViewRootImpl构造时新建的（new ViewRootImpl.W()）
 - 客户端一个window对应一个ViewRootImpl（IWindow，DecorView），在服务端一个window对应一个WindowState，IWindow和WindowState被存在放HashMap中，服务端根据IWindow来去重，同一个window不能add两次
 - 服务端有一个WindowToken结构，用于表达窗口分组，一个WindowToken对应同一分组下的若干WindowState, Activity与Dialog对应的是AppWindowToken，PopupWindow对应的是普通的WindowToken
-- 通过 SurfaceSession 和 SurfaceFlinger建立连接
+- windowState.attach()会创建 SurfaceSession 和 SurfaceFlinger建立连接
 - view只有被添加到窗口后才会被绘制
 - WindowManagerService为每一个应用保留一个Session
 - Activity.onResume()之后才将DecorView添加到窗口，此时DecorView对应的ViewRootImpl才会requestLayout()触发View树绘制
