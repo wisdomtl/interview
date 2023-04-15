@@ -132,6 +132,26 @@ activity生命周期回调中sleep不会发生anr，但是此时触发触摸事�
 - LeakCanary 通过contentProvider安装
 - 当一个Activity的onDestory方法被执行后，说明该Activity的生命周期已经走完，在下次GC发生时，该Activity对象应将被回收
 
+## 监听gc
+构建一个 WeakReference，再构建一个自定义对象塞给他，重写该对象的 finalize方法，该方法执行的时候就是发生gc的时候
+```java
+public class GCCheck {
+    private WeakReference<GCOwer> rf = new WeakReference<>(new GCOwer());
+
+    public class GCOwer {
+
+        @Override
+        protected void finalize() throws Throwable {
+            super.finalize();
+            Log.i("GCCheck", "finalize: app gc occur");
+
+            rf = new WeakReference<>(new GCOwer());
+        }
+    }
+}
+```
+
+
 ## 线上oom
 1. 在oom，或者内存激增，或者内存快触顶的时候dump内存获取hprof文件。
 2. dump内存是阻塞操作，要放到子进程做，通过fork主进程，就得到了主进程的内存拷贝。然后在主进程通过fileObserver异步等待hprof文件生成

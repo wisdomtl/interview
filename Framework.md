@@ -1,5 +1,6 @@
 ﻿# window创建过程
-- 在所有生命周期之前会调用Activity.attach()时创建了PhoneWindow，每个activity有一个PhoneWindow
+- Activity.attach()时创建了PhoneWindow，每个activity有一个PhoneWindow
+
 # DecorView
 - DecorView创建：调用setContentView()中委托给PhoneWindow，并在其中创建DecorView实例并且会根据主题解析预定义的布局文件，并将其作为decorview 的孩子，布局文件中必然有一个id 为 content的容器控件赋值给 contentParent，他就是setContentview的父亲
 - DecorView和ViewRootImpl绑定：在handleResumeActivity()中会先将decorview invisible将DecorView添加到窗口，接着创建ViewRootImpl并将DecorView和其绑定，触发requestLayout遍历View树。添加成功后再调用makeVisible 才显示出来
@@ -7,7 +8,7 @@
 
 # ViewRootImpl
 - 是 ViewParent，即DecorView的父亲，它实现了View和WindowManagerService间通信协议（IWindow），即ViewRootImpl响应 wms 发送过来的指令，响应方式是发送消息到ViewRootHandler（主线程）
-- 是在DecorView被添加到窗口的时候（wm.addView）被新建的（onresume之后）
+- 是在DecorView被添加到窗口的时候（wm.addView）被 WindowManagerGlobal 新建的（onresume之后）
 - ViewRootImpl 在构造的时候会构建和wms的双向通信通道，IWindowSession+IWindow。
 - 一个 ViewRootImpl 持有一个 surface对象，对应SurfaceFlinger中的layer对象，有buffer queue的生产者指针，和消费者指针，Surface通过向生产者指针写，然后SurfaceFlinger通过消费者指针读，将内燃渲染到屏幕
 - View树遍历：requestlayout()即是触发View树遍历，先向主线程消息队列抛同步屏障，然后将View树遍历包装成一个 Runnable抛给编舞者，编舞者注册接收下一个vsync，然后将View树遍历任务缓存在一个链式数组中，待下一个vsync到来之后向主线程抛异步消息，当消息被执行时会将到期的所有任务都从链上摘下并执行。
@@ -18,12 +19,6 @@
 	1. app将view添加到window(委托给WindowManagerGlobal，它是一个单例，每个进程只有一个，WindowManagerGlobal构建了ViewRootImpl并调用了setView(){在mWindowSession.addToDisplay()之前requestLayout()})
 	2. wms登记窗口（形成windowState），wms接到请求后去sf申请Layer，sf将结果回传给wms，wms再传给app，app就能访问surface指向的内存，是一个buffer队列，app是生产者，sf是消费者，app可以像其中填充内容，然后通知sf调用图形接口渲染到屏幕。（其中app和wms双向通信通过ViewRootImpl实现）
 - 只有申请了依附窗口，View才会有可以绘制的目标内存（surface）
-
-# 将View从window删除的过程
- 1. 通过ISession.remove()请求服务端删除view
- 2. 调用view.dispatchDetachFromWindow()
- 3. 从列表中清除WindowManagerGlobal.doRemoveView()中和当前view关联的三个对象（View，其对应的ViewRootImpl，mParams）
-
 
 ## dialog和popupWindow和toast
 - 他们都是窗口，只是类型不同，toast是系统级的窗口 而popupwindow是子窗口，dialog是应用窗口，Activity也是应用窗口
@@ -103,11 +98,6 @@ SurfaceView做帧大图帧动画，优化内存和流畅度：
 - 当绘制任务耗时，会发生跳帧，即本该绘制的任务被跳过（通过异步消息生成时间和上一帧绘制时间比较，小于上一帧时间则跳过重新订阅vsync），commit任务会在绘制任务执行完后进行帧时间对齐，如果绘制任务时间超过2个帧，则将上一帧时间往后延，目的是跳过旧帧。
 - 订阅下一个信号，也被一个被抛到主线程runnable，前序任务执行时间过长，可能会错过订阅时间点
 
-# setContentView()
-1. 构建DecorView：委托给PhoneWindow（在onAttach() 时被构建），PhoneWindow构建DecorView，根据主体inflate预定义布局文件并设置为DecorView的孩子，这些布局文件中有一个id为 content的容器，它就是自定义布局的父亲
-2. 将DecorView添加到窗口：在onResume()之后，将DecorView invisible，再添加到窗口，成功后再将其visible。
-3. 触发View树遍历：DecorView 添加到窗口过程中会创建ViewRootImpl，并成为DecorView的父亲，然后触发requestLayout()，并通过IWindowSession接口WMS建立连接。
-
 ## 系统启动过程
 1. linux启动
 	1. 按开机键，执行ROM中预设代码
@@ -132,7 +122,7 @@ SurfaceView做帧大图帧动画，优化内存和流畅度：
 - 在安装应用是会判断是否要进行dexopt，即dex优化，通过binder通信调用installd进行优化
 
 ## 应用安装流程
-- 应用安装过程就是拷贝apk和解析apk的过程：
+- 应用安装过程就是解析apk并拷贝其中内容的过程：
 	1. 将apk拷贝到/data/app/包名目录下，将其解压，用PackageParse解析AndroidManifest.xml成Package对象
 	2. 将so文件拷贝到/data/app/包名/lib目录
 	2. 然后对dex文件进行优化，并保存在data/dalvik-cache目录下,启动ART的可执行文件是oat，系统会将dex转换为oat
@@ -236,7 +226,7 @@ token建立了应用进程Activity和系统进程ActivityRecord的关联，在Ac
 - 每个被显示的Activity，其ActivityRecord必然位于TaskRecord栈顶，其宿主TaskRecord必然位于ActivityStack栈顶
 
 ## `ActivityRecord`
-- ActivityRecord内部存储了由AndroidManifest.xml文件解析出来的Activity配置信息，同时持有了ATMS的引用、Activity当前状态、所属Task等信息
+- ActivityRecord内部存储了由AndroidManifest.xml文件解析出来的Activity配置信息，同时持有了AMS的引用、Activity当前状态、所属Task等信息
 
 ## `TaskRecord`
 - TaskRecord记录了任务栈标识符，持有的ActivityRecord列表，ActivityStack的引用
@@ -270,7 +260,7 @@ token建立了应用进程Activity和系统进程ActivityRecord的关联，在Ac
 2. 创建服务端Socket
 3. 启动SystemServer进程
 4. 开启循环，利用os.poll()管道机制阻塞等待，systemServer通知它创建app进程
-- 为啥使用socket通信，因为zygote限于systemService，若使用binder，如果要使用Binder，那么需要等待SystemServer创建完成之后再向SystemServer注册Binder服务，这里需要额外的同步操作
+- 为啥使用socket通信，因为zygote先于serviceManager，若使用binder，那么需要等待serviceManager创建完成之后再向SystemServer注册Binder服务，这里需要额外的同步操作
 
 # `WindowManagerService`
 - ~是系统服务，用于管理窗口（添加窗口，移除窗口，窗口排序，触摸事件，窗口动画）
@@ -284,7 +274,6 @@ token建立了应用进程Activity和系统进程ActivityRecord的关联，在Ac
 - windowState.attach()会创建 SurfaceSession 和 SurfaceFlinger建立连接
 - view只有被添加到窗口后才会被绘制
 - WindowManagerService为每一个应用保留一个Session
-- Activity.onResume()之后才将DecorView添加到窗口，此时DecorView对应的ViewRootImpl才会requestLayout()触发View树绘制
 - AMS在为Activity创建ActivityRecord的时候，会新建IApplicationToken.Stub appToken对象，在startActivity之前会首先向WMS服务登记当前Activity的Token（存在wms的map结构中，键是IApplicationToken，值是AppWindowToken）
 - WindowState内维护了三个int类型的layer，这些layer会传递给SurfaceFlinger，已决定在合成是的z轴顺序
 
