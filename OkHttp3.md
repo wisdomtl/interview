@@ -13,6 +13,7 @@
 
 ## 2. BridgeInterceptor
 - 将http request加工，添加header 头字段（Connection:keep-alive,Accept-Encoding：Gzip），再将http response 加工 去掉 header
+
 ## 3. CacheInterceptor
 - 缓存拦截器
 - 从DiskLruCache根据请求url获取缓存Response，然后根据一些http头约定的缓存策略决定是使用缓存响应还是发起新的请求。
@@ -64,6 +65,7 @@ public class CacheInterceptor implements Interceptor {
 - 使用LinkedHashMap存储实体，实现LRU缓存置换算法
 - 每个缓存保存clean和 dirty 两个副本，实现读写分离
 - 使用journal文件做日志记录，便于恢复
+
 ## 4. ConnectInterceptor
 - 连接拦截器
 - 建立连接及连接上的流
@@ -86,12 +88,15 @@ public class CacheInterceptor implements Interceptor {
 - tcp连接建立需要三次握手和四次挥手
 - 连接池实现链接缓存，实现同一地址的链接复用
 - 连接池以队列方式存储链接ArrayDeque，链接池中同一个地址最多维护5个空闲链接，空闲链接最多存活5分钟
+
 ### 连接清理
 - 五分钟定时任务，每五分钟遍历所有链接，并找到其中空闲时间最长的，如果空闲时间超过keep-alive（5分钟），或者空闲链接超过了阈值（5个）则清除这个链接 
+
 ## 4.x NetworkInterceptor
 - 网络拦截器
 - 在连接建立完成和发送请求之间
 - 可能不被调用，比如缓存命中，或者多次调用重定向
+
 ## 5. CallServerInterceptor
 - 请求拦截器
 - 将请求和响应分装成 http2 的帧，通过Http2ExchangeCodec（内部通过okio实现io）

@@ -6,7 +6,7 @@
 - 安全性好：为发送方在内核中添加UID/PID身份信息（无法篡改）
 - 稳定性高：基于C/S架构
 - 性能更佳：传输过程只要一次数据拷贝，而Socket、管道等传统IPC手段都至少需要两次数据拷贝
-，Android将Binder driver挂载为动态内存（LKM：Loadable Kernel Module）Android 系统就可以通过动态添加一个内核模块运行在内核空间，用户进程之间通过这个内核模块作为桥梁来实现通信，通过它以mmap方式将内核空间与接收方用户空间进行内存映射（用户空间一块虚拟内存地址和内核空间虚拟内存地址指向同一块物理地址）。通常Binder驱动将接收方mmap到内核，这样就只需发送方将数据拷贝到内核就好了。
+，Android将Binder driver挂载为动态内存（LKM：Loadable Kernel Module）Android 系统就可以通过动态添加一个内核模块运行在内核空间，用户进程之间通过这个内核模块作为桥梁来实现通信，通过它以mmap方式将内核空间与接收方用户空间进行内存映射（用户空间一块虚拟内存地址和内核空间虚拟内存地址指向同一块物理地址）。这样就只需发送方将数据拷贝到内核就好了。
 - Binder驱动在跨进程通信中，就像路由一样，负责传递binder，
 - Binder 通信是不同进程中线程之间的通信，客户端线程会将线程优先级传递给服务端，服务端会其专门的服务线程。
 - 一个服务会生成一个binder_node结点，有一个binder_node_lock，所以多个客户端请求同一个oneway服务时不能发生并行，会进队列排队
@@ -26,7 +26,6 @@
 
 ### ServiceManager
 - 在跨进程通信中，就像dns查询服务器一样，它维护了binder名和binder引用的映射关系，输入binder名输出binder引用，server向binder驱动注册服务，将别名传递给binder驱动，驱动发现是新binder则新建binder结点，再把binder别名和引用传递给 ServiceManager 保存在一张映射表进行注册，client通过别名查映射表，并获取binder引用，这是一个 binderProxy，客户单会生成一个本地代理来代理binderProxy，然后就能像调普通方法一样调用binder 方法。
-- android 系统启动时，SystemServer向binder驱动注册ServiceManager，所有用户进程的0号引用就是 ServiceManager
 
 
 ## mmap
@@ -56,6 +55,7 @@ mmap是操作系统中一种内存映射的方法，内存映射：就是将用�
 # `Bundle`
 - 使用ArrayMap存储结构，省内存，查询速度稍慢，因为是二分查找，适用于小数据量
 - 使用Parcelable接口实现序列化，而hashmap使用serializable
+
 ## arrayMap和HashMap区别
 1. 存储结构：arrayMap用一个数组存储key的哈希值，用一个数组存储key和value（挨着i和i+1），而HashMap用一个Entry结构包裹key，value，所以HashMap更加占用空间。
 2. 访问方式：arrayMap通过二分查找key数组，时间复杂度是o（log2n），HashMap通过散列定位方式，时间复杂度是o（n），
@@ -63,7 +63,7 @@ mmap是操作系统中一种内存映射的方法，内存映射：就是将用�
 4. 插入键值对时可能发生数组整体平移以腾出插入位置
 
 # `Parcel`
-- 将各种类型的数据或对象的引用进行序列化和反序列化，经过mmap直接写入内核空间
+- 将各种类型的数据或对象的引用进行序列化和反序列化，经过mmap直接写入内核空间，序列化&反序列化到内核空间，而serializable是序列化到任何地方都可以。
 - parcel还可以writeBinder，这个引用导致另一端接收到一个指向这个IBinder的代理IBinder
 - 使用复用池（是一个Parcel数组），获取Parcel对象
 - parcel 存取数据顺序需要保持一致，因为parcel在一块连续的内存地址，通过首地址+偏移量实现存取
@@ -101,9 +101,14 @@ mmap是操作系统中一种内存映射的方法，内存映射：就是将用�
 	- 对于公共字段，可以使用@JvmField注解。
 - lazy线程开销：lazy()默认情况下会指定LazyThreadSafetyMode.SYNCHRONIZED，这可能会造成不必要线程安全的开销，应该根据实际情况，指定合适的model来避免不需要的同步锁。
 - 基本数据类型数组避免自动装箱：所以当需要声明非空的基本类型数组时，应该使用xxxArray，避免自动装箱。
+
+## Activity不保留活动
+通过添加两个flag实现FLAG_ACTIVITY_NEW_TASK和FLAG_ACTIVITY_NO_HISTORY，每次新建都会在新的栈，每次销毁不会回调onPause和 onStop()
+
 ## sequence
 - ~是惰性的：中间操作不会被执行，只有终端操作才会（toList（））
 - ~的计算顺序和迭代器不同：~是对一个元素应用全部的操作，然后第二个元素应用全部操作，而迭代器是对列表所有元素应用第一个操作，然后对列表所有元素应用第二个操作
+
 ## StringBuffer是线程安全的，StringBuilder是不安全
 
 ## 集合
@@ -148,7 +153,7 @@ string是final类型的char数组，表示引用不会改变
 - 存储结构是开散列表：地址向量+同义词子表=数组+单链表。
 - 解决哈希冲突的办法是拉链法：将相同散列地址的键值存放在同义词子表中。
 - capacity为啥要为2的幂次，是为了用位与运算代替取模运算，提高性能。
-- 为啥loadFactor 是0.75，因为是一个
+- 为啥loadFactor 是0.75，因为是一个中庸的选择
 - 构造~时，并没有初始化地址向量，而是要等到put操作是才构造
 - 遍历HashMap的顺序是从地址向量的第一个开始，先从前到后遍历同义词子表，然后下一个同义词子表
 - ~通过hash算法先定位到地址向量中对应的位置，然后遍历同义词子表
@@ -160,13 +165,15 @@ string是final类型的char数组，表示引用不会改变
 - 强引用需要显式的置null 以告诉gc该对象可以被回收
 - 在一个方法的内部有一个强引用，这个引用保存在栈中，而真正的引用内容（Object）保存在堆中。当这个方法运行完成后就会退出方法栈，则引用内容的引用不存在，这个Object会被回收。但是如果这个o是全局的变量时，就需要在不用这个对象时赋值为null，因为强引用不会被垃圾回收
 - 清空list时需要遍历所有元素将其置null
+
 ### 软引用
 - 如果一个对象只具有软引用，则内存空间足够，垃圾回收器就不会回收它；如果内存空间不足了，就会回收这些对象的内存。只要垃圾回收器没有回收它，该对象就可以被程序使用。软引用可用来实现内存敏感的高速缓存。
+
 ### 弱引用
 - 弱引用与软引用的区别在于：只具有弱引用的对象拥有更短暂的生命周期。在垃圾回收器线程扫描它所管辖的内存区域的过程中，一旦发现了只具有弱引用的对象，不管当前内存空间足够与否，都会回收它的内存。不过，由于垃圾回收器是一个优先级很低的线程，因此不一定会很快发现那些只具有弱引用的对象。
+
 ### 虚引用
 - 虚引用主要用来跟踪对象被垃圾回收器回收的活动，当垃圾回收器准备回收一个对象时，如果发现它还有虚引用，就会在回收对象的内存之前，把这个虚引用加入到与之 关联的引用队列中。用于在对象被回收时做一些事情
-- 
 
 ### 软引用、弱引用、虚引用的构造方法均可以传入一个ReferenceQueue与之关联。在引用所指的对象被回收后，引用（reference)本身将会被加入到ReferenceQueue之中，此时引用所引用的对象reference.get()已被回收 (reference此时不为null，reference.get()此时为null)。在一个非强引用所引用的对象回收时，如果引用reference没有被加入到被关联的ReferenceQueue中，则表示还有引用所引用的对象还没有被回收。如果判断一个对象的非强引用本该出现在ReferenceQueue中，实际上却没有出现，则表示该对象发送内存泄漏。
 
@@ -174,6 +181,7 @@ string是final类型的char数组，表示引用不会改变
 ## 接口和抽象类
 - 类可以实现很多个接口，但是只能继承一个抽象类
 - 类如果要实现一个接口，它必须要实现接口声明的所有方法。但是，类可以不实现抽象类声明的所有方法，当然，在这种情况下，类也必须得声明成是抽象的。
+
 ## 字符串常量池
 - JVM为了减少字符串对象的重复创建，其维护了一个特殊的内存，这段内存被成为字符串常量池
 - 字符串常量池实现的前提条件是java中的String对象是不可变的，否则多个引用指向同一个变量的时候并改变了String对象，就会发生错乱
@@ -184,8 +192,10 @@ string是final类型的char数组，表示引用不会改变
 	2. 新建对象形式：String str = new String("droid"); 
 		- 使用这种形式创建字符串时，不管字符串常量池中是否有相同内容，新的字符串总是会被创建
 		- 对于上面使用new创建的字符串对象，如果想将这个对象的引用加入到字符串常量池，可以使用intern方法。调用intern后，首先检查字符串常量池中是否有该对象的引用，如果存在，则将这个引用返回给变量，否则将引用加入并返回给变量。`String str4 = str3.intern();`
+
 ## view生命周期
 构造View --> onFinishInflate --> onAttachedToWindow --> onMeasure --> onSizeChanged --> onLayout --> onDraw --> onDetachedFromWindow
+
 ## 设计原则
 - 单一职责原则：关于内聚的原则。高内聚、低耦合的指导方针，类或者方法单纯，只做一件事情
 - 接口隔离原则：关于内聚的原则。要求设计小而单纯的接口（将过大的接口拆分），或者说只暴露必要的接口，这样可以避免强迫开发者实现不想实现的接口
@@ -228,6 +238,7 @@ public class Lock2Singleton {
 }
 
 ```
+
 ## 工厂模式
 - 目的：解耦。~将对象的使用和对象的构建分割开，使得和对象使用相关的代码不依赖于构建对象的细节
 - 增加了一层“抽象”将“变化”封装起来，然后对“抽象”编程，并利用”多态“应对“变化”，对工厂模式来说，“变化”就是创建对象。
@@ -245,9 +256,11 @@ public class Lock2Singleton {
 		- 定义一个创建对象的接口，把多个对象的创建细节集中在一起
 		- 角色：多个抽象对象，多个具体对象，抽象工厂接口，具体工厂，使用者
 		- 特点：使用组合实现多态
+
 ## 建造者模式
 - 它是一种构造复杂对象的方式，复杂对象有很多可选参数，如果将所有可选参数都作为构造函数的参数，则构造函数太长，~实现了分批设置可选参数。Builder模式增加了构造过程代码的可读性
 - Dialog用到了这个模式
+
 ## 观察者模式
 是一种一对多的通知方式（被观察者通知观察者），被观察者持有观察者的引用
 ListView的BaseAdapter中有DataSetObservable，在设置适配器的时候会创建观察者并注册，调用notifydataSetChange时会通知观察者，观察者会requestLayout
@@ -256,12 +269,14 @@ ListView的BaseAdapter中有DataSetObservable，在设置适配器的时候会�
 - 手段：增加了一层“抽象”将“变化”封装起来，然后对“抽象”编程，并利用”多态“应对“变化”，对策略模式来说，“变化”就是一组算法。
 - 实现方式：将算法抽象成接口，用组合的方式持有接口，通过依赖注入动态的修改算法
 - setXXListener都是这种模式
+
 ## 装饰者模式
 - 装饰者模式意图：为现有对象扩展功能
 - 手段：具体对象持有超类型对象
 - ~是继承的一种替代方案，避免了泛滥子类。
 - ~增加了一层抽象，这层抽象在原有功能的基础上扩展新功能，为了复用原有功能，它持有原有对象。这层抽象本身是一个原有类型
 - ~实现了开闭原则
+
 ## 外观模式
 - 外观模式意图：隐藏细节，降低复杂度
 - 手段：增加了一层抽象，这层抽象屏蔽了不需要关心的子系统调用细节
@@ -270,41 +285,48 @@ ListView的BaseAdapter中有DataSetObservable，在设置适配器的时候会�
 - 实现方式：外观模式会通过组合的方式持有多个子系统的类，~提供更简单易用的接口（和适配器类似，不过这里是新建接口，而适配器是已有接口）
 - 通过~，可以让类更加符合最少知识原则
 - ContextImpl是外观模式
+
 ## 适配器模式
 - 适配器模式意图： 将现有对象包装成另一个对象
 - 手段：增加了一层抽象，这层抽象完成了对象的转换。（具体对象持有另一个而具体对象）
 - 是一种将两个不兼容接口（源接口和目标接口）适配使他们能一起工作的方式，通过增加一个适配层来实现，最终通过使用适配层而不是直接使用源接口来达到目的。
+
 ## 代理模式
 - 代理模式意图：限制对象的访问。或者隐藏访问的细节
 - 手段：增加了一层抽象，这层抽象拦截了对对象的直接访问
 - 实现方式：代理类通过组合持有委托对象（装饰者是直接传入对象，而代理通常是偷偷构建对象）
 - 分类 ：代理模式分为静态代理和动态代理
-静态代理：在编译时已经生成代理类，代理类和委托类一一对应
+静态代理：在编译前已经生成代理类，代理类和委托类一一对应
 动态代理：编译时还未生成代理类，只是定义了一种抽象行为（接口），只有当运行后才生成代理类，使用Proxy.newProxyInstance(),并传入invocationHandler
 - Binder是代理模式
 - ContextWrapper
+
 ## 模板方法模式
 - 模版方法模式目的：复用代码
 - 手段：新增了一层抽象（父类的抽象方法），这层抽象将算法的某些步骤泛化，让子类有不同的实现
 - 实现方式：在方法（通常是父类方法）中定义算法的骨架，将其中的一些步骤延迟到子类实现，这样可以在不改变算法结构的情况下，重新定义某些步骤。这些步骤可以是抽象的（表示子类必须实现），也可以不是抽象的（表示子类可选实现，这种方式叫钩子）
 - android触摸事件中的拦截事件是钩子
 - android绘制中的onDraw()是钩子
+
 ## 命令模式
 - 命令模式意图：将执行请求和请求细节解耦
 - 手段：增加了一层“抽象”将“变化”封装起来，然后对“抽象”编程，并利用”多态“应对“变化”，对命令模式来说，“变化”就是请求细节。新增了一层抽象（命令）
 - 这层抽象将请求细节封装起来，执行者和这层抽象打交道，就不需要了解执行的细节。因为请求都被统一成了一种样子，所以可以统一管理请求，实现撤销请求，请求队列
 - 实现方式：将请求定义成命令接口，执行者持有命令接口
 - java中的Runnable就是命令模式的一种实现
+
 ## 桥接模式
 - 意图：提高系统扩展性
 - 手段：抽象持有另一个抽象
 - 是适配器模式的泛化模式
+
 ## 访问者模式
 - 意图：动态地为一类对象提供消费它们的方法。
 - 重载是静态绑定（方法名相同，参数不同），即在编译时已经绑定，方法的参数无法实现运行时多态
 - 重写是动态绑定（继承），方法的调用者可实现运行时多态
 - 双分派：实现a.fun(b)在a和b上都实现运行时多态，实现方法调用者和参数的运行时多态。
 - 编译时注解使用了访问者模式，一类对象是Element，表示构成代码的元素（类，接口，字段，方法），他有一个accept方法传入一个Visitor对象
+
 ## 异常
 - Exception和Error都继承于Throwable
 - Exception是程序错误
@@ -387,22 +409,22 @@ GC_EXPLICIT: 表示是应用程序调用System.gc、VMRuntime.gc接口或者收�
 - 后台默默地做内存整理moving collector，减少碎片，dvm使用mark and sweep 导致内存碎片。
 - 并行gc被分割成多个子任务，由线程池执行，充分利用多核性能，让gc过程更高效
 
-## JIT ART
-- dalvik每次应用启动都会发生jit，将dex字节码转换成机器码
-- ART和Dalvik都算是一种Android运行时环境，或者叫做虚拟机，用来解释dex类型文件。但是ART是安装时解释（AOT），会占用额外的存储空间，安装很慢，Dalvik是运行时解释（JIT），即每次启动都会编译，启动慢，耗电
-- JIT对于使用频率高的代码编译成机器码
-
-## dalvik虚拟机，jvm
+## dalvik & art
 - 虚拟机的目的是跨平台，即使在不同的硬件和操作系统上，也可以运行相同的应用程序。虚拟机可以将 Java 代码编译成字节码，然后在运行时解释执行
 - 在Android 5.0以下，使用的是Dalvik虚拟机，5.0及以上，则使用的是ART虚拟机
-- dex适用于低内存及速度有限的设备，dex文件比class文件体积小（消除了冗余信息，将多个class文件相同的部分统一存一份）
+- 区别
+	+ 转换字节码时机不同：dalvik在每次运行时将字节码转换为机器码JIT（just in time）,启动变慢，art虚拟机在安装时将字节码转换为机器码AOT(ahead of time),安装时间变长，并且会增加存储空间
+	+ 寄存器消耗：dalvik基于寄存器（指令执行是寄存器操作），每个寄存器只能存放一种数据类型，所以会有更多存储开销，art基于栈架构（指令的执行是出栈入栈），寄存器消耗少。
+	+ 执行速度：dalvik基于寄存器，执行速度快，art基于栈架构（指令的执行是出栈入栈）执行速度慢。
 - dalvik虚拟机内存空间
 	- Linear Alloc：存放只读属性，永久数据
 	- Zygote Space：zygote和应用共享
 	- Allocation Space：进程独占
-- jvm基于内存栈执行，dvm基于寄存器执行，速度更快
 - Dalvik将堆分成了Active堆和Zygote堆
+
+## dex & class
 - jvm中每一个类对应一个.class文件 而dvm将所有.class抱在一起并压缩
+- dex适用于低内存及速度有限的设备，dex文件比class文件体积小（消除了冗余信息，将多个class文件相同的部分统一存一份）
 
 # 编译打包流程
 1. 打包资源，res下文件转换成二进制，asset目录
@@ -435,6 +457,7 @@ GC_EXPLICIT: 表示是应用程序调用System.gc、VMRuntime.gc接口或者收�
 		- abort系列函数来让系统丢弃该广播，使用该广播不再传送到别的BroadcastReceiver
 - 还可以分为本地广播和跨进程广播
 	- 本地广播仅限于在应用内发送广播，向LocalBroadCastManager注册的接收器都存放在本地内存中，跨进程广播都注册到system_server进程 
+
 ## IntentService
 - 他是Service和消息机制的结合，它适用于后台串行处理一连串任务，任务执行完毕后会自销毁。
 - 它启动时会创建HandlerThread和Handler，并将HandlerThread的Looper和Handler绑定，每次调用startService()时，通过handler发送消息到新线程执行
@@ -557,6 +580,7 @@ public boolean dispatchTouchEvent(MotionEvent ev) {
 - 观察指定uri变化并作出响应
 - 通过将自己注册给Content service
 - ContentResolver.notifyChange()将数据变化通知给content service
+
 ## Serializable 和 Parcelable 的区别
 - Parcelable是将一个普通对象的数据保存在parcel中的接口,Parcelable 使用parcel作为数据读写的载体，调用Parcel.marshall()进行序列化
 - Parcelable将数据序列化后存入共享内存（内核空间），其他进程从这块共享内存中读取字节流并反序列化
@@ -564,6 +588,7 @@ public boolean dispatchTouchEvent(MotionEvent ev) {
 - Intent 实现了Parcelable，如果put serializable的值会先序列化为字节数组，然后再写入，二次序列化
 - 序列化是将结构化对象转换为字节流的过程
 - 序列化将对象转换成更加通用的形式，方便传输，存储
+
 ## 存储方式
 1. SharedPreference
 	- 以xml文件形式存储在磁盘
@@ -582,9 +607,11 @@ public boolean dispatchTouchEvent(MotionEvent ev) {
 	- 基于事物更新数据
 	- 支持protocol buffer
 	- 不支持部分刷新
+
 ## recyclerview
 1. **`Recycler`有4个层次用于缓存`ViewHolder`对象，优先级从高到底依次为`ArrayList<ViewHolder> mAttachedScrap`、`ArrayList<ViewHolder> mCachedViews`、`ViewCacheExtension mViewCacheExtension`、`RecycledViewPool mRecyclerPool`。如果四层缓存都未命中，则重新创建并绑定`ViewHolder`对象**
 2. **缓存性能：**
+    
     | 缓存 | 重新创建`ViewHolder` | 重新绑定数据 |
     | ------ | ------ | ------ |
     | mAttachedScrap | false | false |
@@ -643,6 +670,7 @@ public boolean dispatchTouchEvent(MotionEvent ev) {
 - png包括透明度适用于图标，因为大面积的重复颜色，适用于无损压缩
 - webp包括有损和无损两个方式，webp的浏览器支持不佳，webp支持动画和透明度，之前动画只能用gif，透明度只能选png，有损压缩后的webp的解码速度慢，比gif慢2倍，webp支持的颜色比gif多
 - 图片缩放比例 scale = 设备分辨率 / 资源目录分辨率  如：1080x1920的图片显示xhdpi中的图片，scale = 480 / 320 = 1.5，图片的宽高会乘以scale
+
 ## 缩包
 analyze apk---res asset lib dex 大小
 1.gradle shrinkResources 删除无用资源
@@ -681,11 +709,13 @@ analyze apk---res asset lib dex 大小
 ## LruCache
 - ~是内存缓存，持有一个 LinkedHashMap 实例
 - ~用LinkedHashMap作为存储结构，且LinkedHashMap按访问顺序排序，最新的结点在尾部，最老的结点在头部
+
 ## LinkedHashMap
 - 是一个有序 map，可以按插入顺序或者访问顺序排列
 - 在 hashMap 基础上增加了头尾指针形成双向链表，继承 Node 添加前后结点的指针，每次构建结点时会将他链接到链尾。
 - 若是按访问顺序排序，存取键值对的时候会将其拆下插入到链尾，链头是最老的结点，满时会被移出
 - 按访问顺序来排序是LRU缓存的一种实现。
+
 ## diskLruCache
 - 内部有一个线程池（只有一个线程）用于清理缓存
 - 内部有一个LinkedHashMap结构代表内存中的缓存，键是key，值是Entry实体（key+file文件）
@@ -694,8 +724,10 @@ analyze apk---res asset lib dex 大小
 - 写缓存时，新建Entry实体并存在LinkedHashMap中，将其转换成Editor对象，可以从中拿到输出流
 - 通过LinkedHashMap实现LRU替换
 - 每一个Cache项有四个文件，两个状态（DIRTY,CLEAN）,每个状态对应两个文件：一个文件存储Cache meta数据，一个文件存储Cache内容数据
+
 ## 多线程访问数据库
 - 实现多线程读写的关键是enableWriteAheadLogging属性，这个方法 API Level 11添加的，也就是所3.0以上的版本就基本不可能实现真正的多线程读写了。简单的说通过调用enableWriteAheadLogging()和disableWriteAheadLogging()可以控制该数据是否被运行多线程读写，如果允许，它将允许一个写线程与多个读线程同时在一个SQLiteDatabase上起作用。实现原理是写操作其实是在一个单独的log文件，读操作读的是原数据文件，是写操作开始之前的内容，从而互不影响。当写操作结束后读操作将察觉到新数据库的状态。当然这样做的弊端是将消耗更多的内存空间。
+
 ## Lifecycle
 - 让任何组件可以作为观察者观察界面生命周期
 - 通过LifecycleRegistry，它持有所有观察者，通过注册ActivityLifecycleCallbacks 实现生命周期的分发，如果是29 以下则将ReportFragment添加到activity中

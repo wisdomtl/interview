@@ -8,9 +8,10 @@
 
 # app流畅度监测
 ## 帧率
-Choreographer.FrameCallback 被回调时，doFrame 方法都带上了一个时间戳，计算与上一次回调的差值，就可以将之视之为一帧的时间。当累加超过 1s 后，就可以计算出一个 FPS 值。我们每一次回调后，都需要对 Choreographer 进行 postFrameCallback 调用，而调用 postFrameCallback 就是在下一帧 CALLBACK_ANIMATION 类型的链表上进行添加一个节点。所以，doFrame 回调时机并不是这一帧开始计算，也不是这一帧上屏，而是 CPU 处理动画过程中的一个 callback。
-## 滑动帧率
-避免帧率检测对性能的损耗：用户产生交互的时候的帧率更有价值，通过ViewTreeObserver.OnScrollChangedListener和Choreographer.FrameCallback为每一帧带上是否滚动的信息
+- 全帧率监控：Choreographer.FrameCallback 被回调时，doFrame 方法都带上了一个时间戳，计算与上一次回调的差值，就可以将之视之为一帧的时间。当累加超过 1s 后，就可以计算出一个 FPS 值。我们每一次回调后，都需要对 Choreographer 进行 postFrameCallback 调用，而调用 postFrameCallback 就是在下一帧 CALLBACK_ANIMATION 类型的链表上进行添加一个节点。所以，doFrame 回调时机并不是这一帧开始计算，也不是这一帧上屏，而是 CPU 处理动画过程中的一个 callback。
+- 过滤空闲帧率监控：上述方案在主线程无活动是也会监控，监听消息队列（setMessageLogging()）当遇到异步消息时（doFrame()）通过反射向Choreographer注入一个callback（调用postFrameCallback会注册下一个vsync信号）。
+- 滑动帧率：用户产生交互的时候的帧率更有价值，通过ViewTreeObserver.OnScrollChangedListener，标记界面是否存在滚动，只有当存在滚动时才反射注入一个frameCallback。
+- 官方方案：对于Android n 以上的机型可以采取OnFrameMetricsAvailableListener，
 
 ## hitchRate
 - 超出帧应该渲染的时间/滚动耗时 = hitchRate
@@ -106,7 +107,11 @@ ServiceTimeout：前台服务20秒 ，后台服务200s,在service.onCreate()，o
 ContentProvider：publish 在10秒内未完成,所以在provider.onCreate() 中sleep 不会anr
 activity生命周期回调中sleep不会发生anr，但是此时触发触摸事件就会发生anr
 - anr的原因在规定时间内没有完成指定任务，anr监控是通过延迟消息埋炸弹，拆炸弹，没拆成功则引爆
-- anr触发原点ActivityManagerService.appNotResponding()，ams会发送消息到主线程消息队列触发弹窗
+- anr触发原点ActivityManagerService.appNotResponding()，ams会发送消息到主线程消息队列触发弹窗.系统进程会发signal给应用进程触发器dump堆栈。监听signal然后检测主线程消息队列头部消息的when字段（表示该消息应该被消费的时间，如果与当前时间差距很多，表示主线程阻塞）
+- 信息采集
+	+ 原因：通过AcivityManager获取ANRInfo其中包含shortMsg( shortMsg: ANR Inputdispatching timed out ...)可以知道anr原因
+	+ 日志：
+	`String cmd = "logcat -f " + file.getAbsolutePath(); Runtime.getRuntime().exec(cmd);`
 - data/anr/trace文件：发生anr的调用栈
 - 如果非anr线程cpu使用率非常高，则可能是因为没有被分配cpu执行时间导致anr
 - 如果anr进程cpu使用率非常高，则可能是因为不合理代码占用cpu资源
@@ -117,7 +122,8 @@ activity生命周期回调中sleep不会发生anr，但是此时触发触摸事�
 	+ 不能检测到 IdleHandler.queueIdle() 卡顿，因为只能监听消息处理，idleHandler 是在没有消息处理时，才会触发，通过装饰者模式包装一些IdleHandler接口（或者通过修改字节码，将所有IdleHandler换成自定义的），在原有逻辑外面包一层监控逻辑（通过向ThreadHandler抛一个延迟处理消息用于打印调用栈，带queueIdle逻辑执行完后移除消息）
 	+ 无法监听触摸事件的卡顿，因为触摸事件捕获的源头是在system server 进程的 inputDispatcher 线程，它通过和应用进程通信完成触摸事件的分发（socket 通信），卡顿可能是因为应用进程未收到触摸事件。可以通过 PLT hook socket 通信的过程（sendto和recvfrom函数）
 	+ 不能检测同步消息泄漏：同步消息添加和移除是成对的，可能会存在同步消息未被移除的情况（一次插入了两个屏障，异步消息被移除导致无人移除屏障）。通过子线程是不是地向主线程 发一个同步和异步消息（都发一次，因为可能遇到正在渲染），判断他们是否被执行，如果异步执行了，同步没执行，则说明有遗漏的同步消息屏障。
-- Choreographer：为~设置FrameCallback，在每一帧的绘制时都会回调，以织入检测绘制卡顿的逻辑（也是通过向 ThreadHandler 抛一个延迟消息）
+- Choreographer：为~设置FrameCallback，在每一帧的绘制时都会回调，以织入检测绘制卡顿的逻辑（也是通过向 HandlerThread 抛一个延迟消息）
+
 ## 卡顿检测方法
  - `adb shell dumpsys gfxinfo 包名`展示整体卡顿严重度（卡顿帧数占比）
 
@@ -134,7 +140,7 @@ activity生命周期回调中sleep不会发生anr，但是此时触发触摸事�
 
 ## 监听gc
 构建一个 WeakReference，再构建一个自定义对象塞给他，重写该对象的 finalize方法，该方法执行的时候就是发生gc的时候
-```java
+```
 public class GCCheck {
     private WeakReference<GCOwer> rf = new WeakReference<>(new GCOwer());
 
