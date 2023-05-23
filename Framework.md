@@ -1,4 +1,4 @@
-﻿# window创建过程
+# window创建过程
 - Activity.attach()时创建了PhoneWindow，每个activity有一个PhoneWindow
 
 # DecorView
@@ -66,7 +66,7 @@ SurfaceView做帧大图帧动画，优化内存和流畅度：
 - View.draw()绘制的数据是如何流入SurfaceFlinger进行合成的？
 1. Surface.lockCanvas()从BufferQueue中取出图形缓冲区并锁定
 2. View.draw()将内容绘制到Canvas中的Bitmap，就是往图形缓冲区填充数据
-3. Surface.unlockCanvasAndPost()解锁缓冲区并将其入队BufferQueue，然后通知SurfaceFlinger进行合成，在下一个vsync到来时进行合成（app直接喝surfaceFlinger通信）
+3. Surface.unlockCanvasAndPost()解锁缓冲区并将其入队BufferQueue，然后通知SurfaceFlinger进行合成，在下一个vsync到来时进行合成（app直接和surfaceFlinger通信）
 - 应用进程通过Anonymous Shared Memory将数据传输给SurfaceFlinger，因为Binder通信数据量太小
 - 手写匿名共享内存：在服务端自定义Binder实例，并在onTransact()方法中构建MemoryFile，然后反射获取FileDescriptor，并将其写入reply parcel。客户端绑定服务时，通过reply获取FileDescriptor。
 

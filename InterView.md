@@ -726,7 +726,7 @@ analyze apk---res asset lib dex 大小
 - 每一个Cache项有四个文件，两个状态（DIRTY,CLEAN）,每个状态对应两个文件：一个文件存储Cache meta数据，一个文件存储Cache内容数据
 
 ## 多线程访问数据库
-- 实现多线程读写的关键是enableWriteAheadLogging属性，这个方法 API Level 11添加的，也就是所3.0以上的版本就基本不可能实现真正的多线程读写了。简单的说通过调用enableWriteAheadLogging()和disableWriteAheadLogging()可以控制该数据是否被运行多线程读写，如果允许，它将允许一个写线程与多个读线程同时在一个SQLiteDatabase上起作用。实现原理是写操作其实是在一个单独的log文件，读操作读的是原数据文件，是写操作开始之前的内容，从而互不影响。当写操作结束后读操作将察觉到新数据库的状态。当然这样做的弊端是将消耗更多的内存空间。
+- 如果app中只有一个数据库链接，则在这个链接上的所有操作都是现成安全的，sqlite 内部会加锁，让并发操作变为串行
 
 ## Lifecycle
 - 让任何组件可以作为观察者观察界面生命周期
