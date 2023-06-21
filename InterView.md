@@ -127,12 +127,38 @@ string是final类型的char数组，表示引用不会改变
 
 ## 泛型
 - 提高代码复用性：编写的代码可复用于多种数据类型
+- Java 默认所有泛型都是不变型，这是为了运行时类型安全，否则会发生如下错误：
+```
+// Java
+List<String> strs = new ArrayList<String>();
+List<Object> objs = strs; // !!! A compile-time error here saves us from a runtime exception later.
+objs.add(1); // Put an Integer into a list of Strings
+String s = strs.get(0); // !!! ClassCastException: Cannot cast Integer to String
+```
+
 - 提升安全性：在编译期间保证类型安全而不是运行时
 - 消除强转：没有泛型的时候，都用Object代替，因为Object可以强转成任何类型，但这样是危险的，麻烦的
 - PECS是在使用泛型时为了遵守里氏替换原则必须准守的原则，使用泛型增加代码适用性时保证了类型安全。
 	1. PE：Producer extends 实现协变效果：泛型类和类型参数的抽象程度具有相同的变化方向。泛型类只生产泛型，即泛型只会出现在类方法的返回值位置，kotlin中用out表示，java用extend表示
 	2. CS:consumer super 实现逆变效果：泛型类只消费泛型，即泛型只出现在类方法的参数位，kotlin中用in表示，java用<? super T>表示
 - 类型参数的父子关系是否会延续到外部类上，若延续的叫协变，否则父子关系转向了，这叫逆变，若没有父子关系则叫不变型 ，泛型是不变型
+- 协变和逆变都是为了保证类型安全，即不做危险的事情，危险的事情是父类复制给子类，即大范围的值赋值给小范围的值。
+	+ 协变扩大了泛型类的子类型范围，但限制了泛型类只能生产泛型，不能消费，因为消费的是大范围的，赋值给小范围就会报类型错误:
+
+```
+fun copy(from: Array<Any>, to: Array<Any>) {
+    assert(from.size == to.size)
+    for (i in from.indices)
+        to[i] = from[i]
+}
+val ints: Array<Int> = arrayOf(1, 2, 3)
+val any = Array<Any>(3) { "" }
+copy(ints, any)// 限制Int类型的 ints 传入，因为它不是Array<Any>的子类型
+fun copy(from: Array<out Any>, to: Array<Any>) { ... } // Array<Int>  是Array<out Any>的子类型，但代价是copy 中不能像from写内容，只能读
+```
+	- 逆变扩大了泛型类的子类型范围，但限制了泛型类只能消费泛型，不能生产，因为生产出来的值是大范围，赋值给小范围就会报类型错误
+
+- kotlin 的 in和out，是declaration-site variance声明侧的，而java是use-site variance。这样做的好处是可以提前让编译器知道是协变还是逆变
 - 类型擦除：为了兼容1.5以前的代码，即编译后的泛型都变成了 Object或者上界，然后在使用的地方进行类型强转，所以泛型只存在于编译前，所以是伪泛型。
 - Signature：被擦除的类型信息会记录到~，虽然编译时擦除了类型，但运行时反射时从~中获取类型
 - 当子类覆盖或者实现父类方法时，方法的形参要比父类方法的更为宽松；
@@ -584,6 +610,8 @@ public boolean dispatchTouchEvent(MotionEvent ev) {
 ## Serializable 和 Parcelable 的区别
 - Parcelable是将一个普通对象的数据保存在parcel中的接口,Parcelable 使用parcel作为数据读写的载体，调用Parcel.marshall()进行序列化
 - Parcelable将数据序列化后存入共享内存（内核空间），其他进程从这块共享内存中读取字节流并反序列化
+- Parcelable 序列化到内存，serialable序列化到任何地方
+- Parcelable 用于将数据序列化后在各个安卓组件间传递。
 - Serializable使用反射，并且会产生一些除数据本身以外的额外信息，比如协议，类名长度，字段长度，速度慢，会产生很多中间变量
 - Intent 实现了Parcelable，如果put serializable的值会先序列化为字节数组，然后再写入，二次序列化
 - 序列化是将结构化对象转换为字节流的过程
