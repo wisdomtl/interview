@@ -128,6 +128,9 @@ BroadcastTimeout：广播onReceive()函数运行在主线程中，在特定的�
 ServiceTimeout：前台服务20秒 ，后台服务200s,在service.onCreate()，onstart,onbind,onrebind,onUnbind()中sleep都会会anr,ActiveServices 埋下炸弹，当ActivityThread中handler收到CREATE_SERVICE消息时,拆炸弹再回调service.oncreate()
 ContentProvider：publish 在10秒内未完成,所以在provider.onCreate() 中sleep 不会anr
 activity生命周期回调中sleep不会发生anr，但是此时触发触摸事件就会发生anr
+- 监听anr ：当一个进程发生ANR时，则会收到SIGQUIT信号。如果，我们能监控到系统发送的SIGQUIT信号，也许就能感知到发生了ANR，除Zygote进程外，每个进程都会创建一个SignalCatcher守护线程，用于捕获SIGQUIT、SIGUSR1信号，并采取相应的行为。
+- 过滤anr：并不是所有SIGQUIT 信号都代表anr，可以通过Looper的mMessage对象，该对象的when变量，表示的是当前正在处理的消息入队的时间，我们可以通过when变量减去当前时间，得到的就是等待时间，如果等待时间过长，就说明主线程是处于卡住的状态。这时候收到SIGQUIT信号基本上就可以认为的确发生了一次ANR
+- 分为前台anr和后台anr：前台ANR会弹出无响应的Dialog，后台ANR会直接杀死进程
 - anr的原因在规定时间内没有完成指定任务，anr监控是通过延迟消息埋炸弹，拆炸弹，没拆成功则引爆
 - anr触发原点ActivityManagerService.appNotResponding()，ams会发送消息到主线程消息队列触发弹窗.系统进程会发signal给应用进程触发器dump堆栈。监听signal然后检测主线程消息队列头部消息的when字段（表示该消息应该被消费的时间，如果与当前时间差距很多，表示主线程阻塞）
 - 信息采集
