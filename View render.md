@@ -52,9 +52,9 @@
 
 ## MeasureSpec
 MeasureSpec用于在View测量过程中描述尺寸，它是一个包含了布局模式和布局尺寸的int值(32位)，其中最高的2位代表布局模式，后30位代表布局尺寸。它包含三种布局模式分别是
-1. UNSPECIFIED：父亲没有规定你多大
-2. EXACTLY：父亲给你设定了一个死尺寸
-3. AT_MOST：父亲规定了你的最大尺寸
+1. UNSPECIFIED：没有规定你多大
+2. EXACTLY：设定了一个死尺寸
+3. AT_MOST：你的最大尺寸
 
 # View
 - mDrawingCache是一个bitmap用来缓存上一次绘制的样子，当这一帧不需要重绘时，直接用
