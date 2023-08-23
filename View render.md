@@ -15,7 +15,7 @@
 - 其实两个函数都会自底向上传递到顶层视图ViewRootImpl中
 - requestLayout()会添加两个标记位PFLAG_FORCE_LAYOUT，PFLAG_INVALIDATED，而invalidate()只会添加PFLAG_INVALIDATED（所以不会测量和布局）
 - invalidate(),会检查主线程消息队列中是否已经有遍历view树任务，通过ViewRootImpl.mWillDrawSoon是否为true，若有则不再抛
-- invalidate表示当前控件需要重绘，会标记PFLAG_INVALIDATED，重绘请求会逐级上传到根视图（但只有这个view会被重绘，因为其他的父类没有PFLAG_INVALIDATED，并且携带脏区域.初始脏区是发起view的上下左右，逐级向上传递后每次都会换到父亲的坐标系（平移 left，top）。
+- invalidate表示当前控件需要重绘，会标记PFLAG_INVALIDATED，软件绘制会计算自己的重绘区域并通过invalidateChild传递给父亲，重绘区域不停的求交集，而硬件绘制会将需要重绘的视图置标记位，两种情况都会自顶向下触发重绘。两种的重绘区域不同，硬件是整个window，但软件是交集矩形区域
 - View.measure()和View.layout()会先检查是否有PFLAG_FORCE_LAYOUT标记，如果有则进行测量和定位
 - View.requestLayout()中设置了PFLAG_FORCE_LAYOUT标记，所以测量，布局，有可能触发onDraw是因为在在layout过程中发现上下左右和之前不一样，那就会触发一次invalidate，所以触发了onDraw。
 - postInvalidate 向主线程发送了一个INVALIDATE的消息
