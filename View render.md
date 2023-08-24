@@ -69,7 +69,7 @@ MeasureSpec用于在View测量过程中描述尺寸，它是一个包含了布�
 
 # 动画
 1. view animation 
-    - 也称为补间动画：定义关键帧，其余帧由系统补齐，有点像导航
+    - 也称为补间动画：定义关键帧，其余帧由系统补齐
     - 局限于view 局限于位移 旋转 透明度 缩放
     - 在View重绘时,View会从父控件Transform中获取动画矩阵,并根据这个矩阵计算出View在屏幕中的位置和大小,然后进行绘制，每次绘制的时候会检查动画是否完成，若没完成则调用invalidate(),ViewRootImpl向编舞者跑了一个遍历View树的任务，会有同步消息屏障
     - View Animation实际上是通过不断重绘View(onDraw())并更新其transform属性来产生动画效果的(没有执行measure 和 layout)
