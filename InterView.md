@@ -58,7 +58,7 @@ mmap是操作系统中一种内存映射的方法，内存映射：就是将用�
 
 ## arrayMap和HashMap区别
 1. 存储结构：arrayMap用一个数组存储key的哈希值，用一个数组存储key和value（挨着i和i+1），而HashMap用一个Entry结构包裹key，value，所以HashMap更加占用空间。
-2. 访问方式：arrayMap通过二分查找key数组，时间复杂度是o（log2n），HashMap通过散列定位方式，时间复杂度是o（n），
+2. 访问方式：arrayMap通过二分查找key数组，时间复杂度是o（log2n），HashMap通过散列定位方式，时间复杂度是o（1），
 3. ArrayMap删除键值对时候会进行数组平移以压缩数组
 4. 插入键值对时可能发生数组整体平移以腾出插入位置
 
@@ -142,9 +142,9 @@ String s = strs.get(0); // !!! ClassCastException: Cannot cast Integer to String
 	1. PE：Producer extends 实现协变效果：泛型类和类型参数的抽象程度具有相同的变化方向。泛型类只生产泛型，即泛型只会出现在类方法的返回值位置，kotlin中用out表示，java用extend表示
 	2. CS:consumer super 实现逆变效果：泛型类只消费泛型，即泛型只出现在类方法的参数位，kotlin中用in表示，java用<? super T>表示
 - 类型参数的父子关系是否会延续到外部类上，若延续的叫协变，否则父子关系转向了，这叫逆变，若没有父子关系则叫不变型 ，泛型是不变型
-- 协变和逆变都是为了保证类型安全，即不做危险的事情，危险的事情是父类复制给子类，即大范围的值赋值给小范围的值。
-	+ 协变扩大了泛型类的子类型范围，但限制了泛型类只能生产泛型，不能消费，因为消费的是大范围的，赋值给小范围就会报类型错误:
-
+- 协变和逆变都是为了保证类型安全，即不做危险的事情，危险的事情是父类赋值给子类，即大范围的值赋值给小范围的值。
+	+ 逆变扩大了泛型类的子类型范围，但限制了泛型类只能消费泛型，不能生产，因为生产出来的值是大范围，赋值给小范围就会报类型错误
+	+ 协变扩大了泛型类的子类型范围，但限制了泛型类只能生产泛型，因为生产出来的子类，子类可以安全的复制给父类。不能消费，因为消费的是大范围的，赋值给小范围就会报类型错误
 ```
 fun copy(from: Array<Any>, to: Array<Any>) {
     assert(from.size == to.size)
@@ -156,7 +156,6 @@ val any = Array<Any>(3) { "" }
 copy(ints, any)// 限制Int类型的 ints 传入，因为它不是Array<Any>的子类型
 fun copy(from: Array<out Any>, to: Array<Any>) { ... } // Array<Int>  是Array<out Any>的子类型，但代价是copy 中不能像from写内容，只能读
 ```
-	- 逆变扩大了泛型类的子类型范围，但限制了泛型类只能消费泛型，不能生产，因为生产出来的值是大范围，赋值给小范围就会报类型错误
 
 - kotlin 的 in和out，是declaration-site variance声明侧的，而java是use-site variance。这样做的好处是可以提前让编译器知道是协变还是逆变
 - 类型擦除：为了兼容1.5以前的代码，即编译后的泛型都变成了 Object或者上界，然后在使用的地方进行类型强转，所以泛型只存在于编译前，所以是伪泛型。
