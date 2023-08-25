@@ -70,6 +70,16 @@ mmap是操作系统中一种内存映射的方法，内存映射：就是将用�
 - parcel写入内核的共享内存空间，另一个进程可以直接读取这个内核空间（因为做了mmap，不需要另一次copy_to_user()）
 - Active object,我们一般存入到Parcel的是数据的本身，而Active object则是写入一个特殊的标志token，这个token引用了原数据对象。当从Parcel中恢复这个对象时，我们可以不用重新实例化这个对象，而是通过得到一个handle值。通过handle值则可以直接操作原来需要写入的对象
 
+## Serializable 和 Parcelable 的区别
+- Parcelable是将一个普通对象的数据保存在parcel中的接口,Parcelable 使用parcel作为数据读写的载体，调用Parcel.marshall()进行序列化
+- Parcelable将数据序列化后存入共享内存（内核空间），其他进程从这块共享内存中读取字节流并反序列化
+- Parcelable 序列化到内存，serialable序列化到任何地方
+- Parcelable 用于将数据序列化后在各个安卓组件间传递。
+- Serializable使用反射，并且会产生一些除数据本身以外的额外信息，比如协议，类名长度，字段长度，速度慢，会产生很多中间变量
+- Intent 实现了Parcelable，如果put serializable的值会先序列化为字节数组，然后再写入，二次序列化
+- 序列化是将结构化对象转换为字节流的过程
+- 序列化将对象转换成更加通用的形式，方便传输，存储
+
 ## 画圆角
 1. 通过drawRoundRect(),使用的画笔设置一个shader，TileMode.CLAMP
 2. 通过drawBitmap(),通过画一个圆角的path 通过clipPath()
@@ -608,15 +618,7 @@ public boolean dispatchTouchEvent(MotionEvent ev) {
 - 通过将自己注册给Content service
 - ContentResolver.notifyChange()将数据变化通知给content service
 
-## Serializable 和 Parcelable 的区别
-- Parcelable是将一个普通对象的数据保存在parcel中的接口,Parcelable 使用parcel作为数据读写的载体，调用Parcel.marshall()进行序列化
-- Parcelable将数据序列化后存入共享内存（内核空间），其他进程从这块共享内存中读取字节流并反序列化
-- Parcelable 序列化到内存，serialable序列化到任何地方
-- Parcelable 用于将数据序列化后在各个安卓组件间传递。
-- Serializable使用反射，并且会产生一些除数据本身以外的额外信息，比如协议，类名长度，字段长度，速度慢，会产生很多中间变量
-- Intent 实现了Parcelable，如果put serializable的值会先序列化为字节数组，然后再写入，二次序列化
-- 序列化是将结构化对象转换为字节流的过程
-- 序列化将对象转换成更加通用的形式，方便传输，存储
+
 
 ## 存储方式
 1. SharedPreference
@@ -881,7 +883,7 @@ taskAffinity与allowTaskReparenting配合：我们可以在AndroidManifest.xml�
 ## ThreadLocal
 - 用于将对象和当前线程绑定（将对象存储在当前线程的ThreadLocalMap结构中）
 - ThreadLocalMap是一个类似HashMap的存储结构，键是ThreadLocal对象的弱引用，值是要保存的对象
-- set()方法会获取当前线程的ThreadLocalMap对象
+- set()方法会获取当前线程的ThreadLocalMap对象，保证value是存储在当前线程的 map结构中
 - threadLocal内存泄漏：key是弱引用，gc后被回收，value 被entry持有，再被ThreadLocalMap持有，再被线程持有，如果线程没有结束，则value无法访问到，也无法回收，方案是及时remove掉不用的value
 - threadlocal 会自动清理key为null 的entry
 
