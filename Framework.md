@@ -12,7 +12,7 @@
 - ViewRootImpl 在构造的时候会构建和wms的双向通信通道，IWindowSession+IWindow。
 - 一个 ViewRootImpl 持有一个 surface对象，对应SurfaceFlinger中的layer对象，有buffer queue的生产者指针，和消费者指针，Surface通过向生产者指针写，然后SurfaceFlinger通过消费者指针读，将内燃渲染到屏幕
 - View树遍历：requestlayout()即是触发View树遍历，先向主线程消息队列抛同步屏障，然后将View树遍历包装成一个 Runnable抛给编舞者，编舞者注册接收下一个vsync，然后将View树遍历任务缓存在一个链式数组中，待下一个vsync到来之后向主线程抛异步消息，当消息被执行时会将到期的所有任务都从链上摘下并执行。
-- 子线程更新ui：可以实现，需要绕过viewrootImpl的检查，比如在onCreate()中启动异步线程更新ui，onresume之后viewrootimpl才被构建。或者使用surfaceview
+- 子线程更新ui：可以实现，需要绕过viewrootImpl的检查，比如在onCreate()中启动异步线程更新ui，onresume之后viewrootimpl才被构建。或者使用surfaceview，viewrootImpl在哪里构建其中的mThread成员就会指向当前线程。
 
 # 将View添加到窗口过程
 - 是一个app和wms，以及wms和sf双向通信的过程：
@@ -129,18 +129,13 @@ SurfaceView做帧大图帧动画，优化内存和流畅度：
 	3. 创建data/data/包名 目录，用于存放用户数据       
 - APK 的安装是拷贝和注册的过程，不仅仅需要将 APK 的实体放到系统的特定目录（/data/app/），而且需要向 PackageManagerService 注册包名、注册四大组件，该 APK 才能算是成功安装到了 Android系统
 
-## app启动过程
-- App启动过程就好比，在Launcher进程中启动另一个进程的Activity
-- 冷启动：Launcher 通知 AMS，AMS 通知zygote创建应用进程-创建应用主线程ActivityThread，及消息循环，ActivityThread和AMS不断交互创建Application对象，Activity对象
-- 热启动：应用进程还存活，只是不活跃，
-- 温启动，进程还存活，但Activity需要重头创建
-- 在log中过滤displayed关键词，
 
 ## SystemServiceManager
 - 它负责创建系统服务和管理系统服务生命周期
 - 系统服务是通过反射构造器创建的，然后被添加到SystemServiceManager.mServices中保存，最后调用了onStart()启动服务
 
 ## 应用启动过程
+- App启动过程就好比，在Launcher进程中启动另一个进程的Activity
 1. launcher进程向SystemServer进程请求启动新应用的主activity
 2. SystemServer进程创建出对应activityRecord对象
 3. 如果界面隶属于现有task，则压栈，否则新建task栈
@@ -151,12 +146,6 @@ SurfaceView做帧大图帧动画，优化内存和流畅度：
 8. SystemServer给应用进程主线程发消息要求创建并启动主activity
 9. 通过跨进程通信触发activity的各种生命周期回调
 10. 到onResume的时候会将顶层视图添加到窗口，并构建viewrootimpl，以此触发一次view树遍历
-
-### 版本1
-1. 创建一个name为“zygote”的Socket服务端，监听socket，用于等待AMS的请求Zygote来创建新的进程；
-2. 预加载类和资源，包括drawable、color、OpenGL和文本连接符资源等，保存到Resources一个全局静态变量中，下次读取系统资源的时候优先从静态变量中查找；
-3. 启动SystemServer进程；
-4. 通过runSelectLoop(）方法，开启一个死循环，等待AMS的请求创建新的应用程序进程。
 
 ### 版本2
 1. ams 通知zygote fork一个app进程
