@@ -10,7 +10,7 @@
 - 是 ViewParent，即DecorView的父亲，它实现了View和WindowManagerService间通信协议（IWindow），即ViewRootImpl响应 wms 发送过来的指令，响应方式是发送消息到ViewRootHandler（主线程）
 - 是在DecorView被添加到窗口的时候（wm.addView）被 WindowManagerGlobal 新建的（onresume之后）
 - ViewRootImpl 在构造的时候会构建和wms的双向通信通道，IWindowSession+IWindow。
-- 一个 ViewRootImpl 持有一个 surface对象，对应SurfaceFlinger中的layer对象，有buffer queue的生产者指针，和消费者指针，Surface通过向生产者指针写，然后SurfaceFlinger通过消费者指针读，将内燃渲染到屏幕
+- 一个 ViewRootImpl 持有一个 surface对象，对应SurfaceFlinger中的layer对象，有buffer queue的生产者指针，和消费者指针，Surface通过向生产者指针写，然后SurfaceFlinger通过消费者指针读，将内容渲染到屏幕
 - View树遍历：requestlayout()即是触发View树遍历，先向主线程消息队列抛同步屏障，然后将View树遍历包装成一个 Runnable抛给编舞者，编舞者注册接收下一个vsync，然后将View树遍历任务缓存在一个链式数组中，待下一个vsync到来之后向主线程抛异步消息，当消息被执行时会将到期的所有任务都从链上摘下并执行。
 - 子线程更新ui：可以实现，需要绕过viewrootImpl的检查，比如在onCreate()中启动异步线程更新ui，onresume之后viewrootimpl才被构建。或者使用surfaceview，viewrootImpl在哪里构建其中的mThread成员就会指向当前线程。
 

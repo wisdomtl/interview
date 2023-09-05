@@ -31,9 +31,9 @@ sint32 使用了一种称为“变长编码（Variable-Length Encoding，简称 
 # app流畅度监测
 ## 帧率
 - 全帧率监控：Choreographer.FrameCallback 被回调时，doFrame 方法都带上了一个时间戳，计算与上一次回调的差值，就可以将之视之为一帧的时间。当累加超过 1s 后，就可以计算出一个 FPS 值。我们每一次回调后，都需要对 Choreographer 进行 postFrameCallback 调用，而调用 postFrameCallback 就是在下一帧 CALLBACK_ANIMATION 类型的链表上进行添加一个节点。所以，doFrame 回调时机并不是这一帧开始计算，也不是这一帧上屏，而是 CPU 处理动画过程中的一个 callback。
-- 过滤空闲帧率监控：上述方案在主线程无活动是也会监控，监听消息队列（setMessageLogging()）当遇到异步消息时（doFrame()）通过反射向Choreographer注入一个callback（调用postFrameCallback会注册下一个vsync信号）。
-- 滑动帧率：用户产生交互的时候的帧率更有价值，通过ViewTreeObserver.OnScrollChangedListener，标记界面是否存在滚动，只有当存在滚动时才反射注入一个frameCallback。
-- 官方方案：对于Android n 以上的机型可以采取OnFrameMetricsAvailableListener，
+- 过滤空闲帧率监控：上述方案在主线程无活动时也会不停地注册下一个vsync信号。解决方案是监听消息队列（setMessageLogging()）当遇到异步消息时（doFrame()）通过反射向Choreographer注入一个callback（调用postFrameCallback会注册下一个vsync信号）。
+- 滑动帧率：用户产生交互的时候的帧率更有价值，通过ViewTreeObserver.OnScrollChangedListener，标记界面是否存在滚动，只有当存在滚动时才postFrameCallback
+- 官方方案：在 Android 7.0 之后，官方已经引入了 FrameMetrics API 来提供帧耗时的详细数据。androidx 的 JankStats 库主要就是基于 FrameMetrics API 来实现的帧耗时数据统计。window.addOnFrameMetricsAvailableListener()
 
 ## hitchRate
 - 超出帧应该渲染的时间/滚动耗时 = hitchRate
