@@ -74,7 +74,9 @@ VSS = Virtual Set Size = VSS= RSS+ 未分配实际物理内存
 	2. 网络大图监控：hook Glide 的 SingleRequest，注册 requestListener 监听图片加载	
 	3. 监控 ImageView.setImageDrawable()，修改字节码将ImageView替换为自定义ImageView，计算图片大小（可以在IdleHandler中做），如果大于控件大小，在debug弹窗，release上报后台
 2. 内存泄漏监控
-	1. dump 出内存镜像（fork 出新进程进行），上传到后台进行分析 	
+	1. 堆内存超过阈值，线程数超过阈值，内存增长过快时进行dump内存
+	2. 过 Debug.MemoryInfo 的 getMemoryStat 方法（需要 23 版本及以上），我们可以获得等价于 Memory Profiler 默认视图中的多项数据
+	2. dump 出内存镜像（fork 出新进程进行），上传到后台进行分析 	
 
 ## 分析OOM
 - 关键要找出OOM时，什么东西占用内存最多，为什么占用这么多。使用android monitor dump hprof---转换成标准hprof 使用mat，在dump之前需要手动gc一下，排除软引用和弱引用的情况
@@ -208,10 +210,14 @@ public class GCCheck {
 3. shape+layout资源 dsl 化（1mb）
 4. 
 
-# 启动优化
+# 冷启动优化
 1. 视觉优化：windowBackground设置一张图片（成为StartingWindow的Decorview的背景）
 2. 初始化任务优化：可以异步初始化的，放异步线程初始化，必须在主线程但可以延迟初始化的，放在IdleHandler中，
 3. ContentProvider 优化：去掉没有必要的contentProvider，或者将多个ContentProvider通过startup进行串联成一个，这样可以减少contentprovider对象创建的耗时，ContentProvider 即使在没有被调用到，也会在启动阶段被自动实例化并执行相关的生命周期。在进程的初始化阶段调用完 Application 的 attachBaseContext 方法后，会再去执行 installContentProviders 方法，对当前进程的所有 ContentProvider 进行 install
 4. 缩小main dex：MultidexTransform 解析所有manifest中声明的组件生成manifest_keep.txt，再查找manifest_keep.txt中所有类的直接引用类，将其保存在maindexlist.txt中，最后将maindexlist.txt中的所有class编译进main.dex。multiDex优化，自行解析AndroidManifest，自定义main.dex生成逻辑，将和启动页相关的代码分在主dex中，减小主dex大小，加快加载速度。
 5. multiDex.install 优化：
 	- 4.x使用Dalvik 虚拟机，所以只能执行经过优化后的 odex 文件，为了提升应用安装速度，其在安装阶段仅会对应用的首个 dex 优化成odex并加载到PathClassLoader的dexPathListz中。对于非首个 dex 其会在首次运行调用 MultiDex.install 进行优化并加载到classloader中，而这个优化是非常耗时的，这就造成了 4.x 设备上首次启动慢的问题，MultiDex.install()耗时。它会先解压apk，遍历其中的dex文件，然后压缩成对应的zip文件（这是第一次的逻辑，第二次启动时已经有zip文件则直接读取。），然后对zip文件进行odex优化，最终返回一个DexFile，再将dexfile追加到PathClassLoader的pathList尾部。将install异步化，多线程话，改变加载流程，使得首次不需要加载odex而是直接加载dex，先正常启动，然后后台起一个单独进程慢慢做odex优化
+	
+# 页面启动优化
+1. 布局异步加载
+2. 接口预请求--在路由跳转之前添加拦截进行预请求
