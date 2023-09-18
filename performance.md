@@ -208,10 +208,29 @@ public class GCCheck {
 1. 只保留一张3倍图（在低分辨率手机上图片会根据像素密度裁剪）
 2. 所有的图片webp化（5mb）
 3. shape+layout资源 dsl 化（1mb）
-4. 
 
-# 冷启动优化
-1. 视觉优化：windowBackground设置一张图片（成为StartingWindow的Decorview的背景）
+# 启动优化
+冷启动 & 温启动 & 热启动
+- 温启动是指进程还在，但是Activity需要重新执行onCreate()，所以主界面的 onCreate 影响温启动速度
+- 热启动是指进程和activity实例都在，只需要执行 Activity.onStart()
+启动耗时统计：
+```
+tangliang@SH-tangliang tools % adb shell am start -S -W com.snda.lantern.wifilocating/com.wifitutu.ui.launcher.LauncherActivity
+Stopping: com.snda.lantern.wifilocating
+Starting: Intent { act=android.intent.action.MAIN cat=[android.intent.category.LAUNCHER] cmp=com.snda.lantern.wifilocating/com.wifitutu.ui.launcher.LauncherActivity }
+Status: ok
+Activity: com.snda.lantern.wifilocating/com.wifitutu.ui.launcher.LauncherActivity
+ThisTime: 2721
+TotalTime: 2721
+WaitTime: 2742
+Complete
+```
+
+
+## 冷启动优化
+初步显示所用时间 (TTID) 和完全绘制所用时间 (TTFD)。TTID 是显示第一帧所用的时间，TTFD 则是应用达到可全面互动的状态所用的时间
+
+1. 视觉优化：windowBackground设置一张图片（成为StartingWindow的Decorview的背景）当应用启动时，空白启动窗口将保留在屏幕上，直到系统首次完成应用绘制。此时，系统进程会切换应用的启动窗口，让用户与应用互动。
 2. 初始化任务优化：可以异步初始化的，放异步线程初始化，必须在主线程但可以延迟初始化的，放在IdleHandler中，
 3. ContentProvider 优化：去掉没有必要的contentProvider，或者将多个ContentProvider通过startup进行串联成一个，这样可以减少contentprovider对象创建的耗时，ContentProvider 即使在没有被调用到，也会在启动阶段被自动实例化并执行相关的生命周期。在进程的初始化阶段调用完 Application 的 attachBaseContext 方法后，会再去执行 installContentProviders 方法，对当前进程的所有 ContentProvider 进行 install
 4. 缩小main dex：MultidexTransform 解析所有manifest中声明的组件生成manifest_keep.txt，再查找manifest_keep.txt中所有类的直接引用类，将其保存在maindexlist.txt中，最后将maindexlist.txt中的所有class编译进main.dex。multiDex优化，自行解析AndroidManifest，自定义main.dex生成逻辑，将和启动页相关的代码分在主dex中，减小主dex大小，加快加载速度。
@@ -221,3 +240,5 @@ public class GCCheck {
 # 页面启动优化
 1. 布局异步加载
 2. 接口预请求--在路由跳转之前添加拦截进行预请求
+3. 图片预请求，分为url已知，比如feeds流到详情页，需要加载图片的url是一样的，只是尺寸不同
+

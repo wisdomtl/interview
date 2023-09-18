@@ -5,7 +5,7 @@
 - 测量、定位、绘制都是从View树的根结点开始自顶向下进行地，即都是由父控件驱动子控件进行地。父控件的测量在子控件件测量之后，但父控件的定位和绘制都在子控件之前。
 - 父控件测量过程中`ViewGroup.onMeasure()`，会遍历所有子控件并驱动它们测量自己`View.measure()`。父控件还会将父控件的布局模式与子控件布局参数相结合形成一个`MeasureSpec`对象传递给子控件以指导其测量自己。
 - 子控件的MeasureSpec有九种情况：3*3的表格，布局模式有三种取值EXACTLY,AT_MOST,UNSPECIFIED,孩子布局参数也有三种情况，具体数值，match_parent,wrap_content.如果孩子是wrapcontent，根据measureChildWithMargin,则孩子的模式是AtMost）。`View.setMeasuredDimension()`是测量过程的终点，它表示`View`大小有了确定值。
-- 第一次加载onMeasure()至少调用两次，最多调用5次（都是有ViewRootImpl调用performMeasure()）
+- 第一次加载onMeasure()至少调用两次，最多调用5次（都是有ViewRootImpl调用performMeasure()），如果添加的窗口
 - 通过 MEASURED_DIMENSION_SET 强制指定需要为 measuredDimension赋值，否则抛异常
 - 父控件在完成自己定位之后，会调用`ViewGroup.onLayout()`遍历所有子控件并驱动它们定位自己`View.layout()`。子控件总是相对于父控件左上角定位。`View.setFrame()`是定位过程的终点，它表示视图矩形区域以及相对于父控件的位置已经确定。
 - 控件按照绘制背景，绘制自身，绘制孩子的顺序进行。重写onDraw()定义绘制自身的逻辑，父控件在完成绘制自身之后,会调用`ViewGroup.dispatchDraw()`遍历所有子控件并驱动他们绘制自己`View.draw()`
@@ -13,11 +13,9 @@
 
 ## requestLayout()和invalidate()
 - 其实两个函数都会自底向上传递到顶层视图ViewRootImpl中
-- requestLayout()会添加两个标记位PFLAG_FORCE_LAYOUT，PFLAG_INVALIDATED，而invalidate()只会添加PFLAG_INVALIDATED（所以不会测量和布局）
-- invalidate(),会检查主线程消息队列中是否已经有遍历view树任务，通过ViewRootImpl.mWillDrawSoon是否为true，若有则不再抛
-- invalidate表示当前控件需要重绘，会标记PFLAG_INVALIDATED，软件绘制会计算自己的重绘区域并通过invalidateChild传递给父亲，重绘区域不停的求交集，而硬件绘制会将需要重绘的视图置标记位，两种情况都会自顶向下触发重绘。两种的重绘区域不同，硬件是整个window，但软件是交集矩形区域
-- View.measure()和View.layout()会先检查是否有PFLAG_FORCE_LAYOUT标记，如果有则进行测量和定位
-- View.requestLayout()中设置了PFLAG_FORCE_LAYOUT标记，所以测量，布局，有可能触发onDraw是因为在在layout过程中发现上下左右和之前不一样，那就会触发一次invalidate，所以触发了onDraw。
+- requestLayout()必定会出发measure和layout，如果前两个过程中view大小发生变化，则会出发draw，而invalidate()只会出发draw
+- invalidate表示当前控件需要重绘，会标记PFLAG_INVALIDATED标记，不管是软件绘制还是硬件绘制都会设置重绘区域。对于硬件绘制只有被置了标记位的控件才会重绘，软件绘制整个view树都要重绘。
+- View.measure()和View.layout()会先检查是否有PFLAG_FORCE_LAYOUT标记，如果有则进行测量和定位（requestlayout会置这个标标记位）
 - postInvalidate 向主线程发送了一个INVALIDATE的消息
 
 ## 绘制模型
@@ -53,9 +51,9 @@
 
 ## MeasureSpec
 MeasureSpec用于在View测量过程中描述尺寸，它是一个包含了布局模式和布局尺寸的int值(32位)，其中最高的2位代表布局模式，后30位代表布局尺寸。它包含三种布局模式分别是
-1. UNSPECIFIED：没有规定你多大
-2. EXACTLY：设定了一个死尺寸
-3. AT_MOST：你的最大尺寸
+1. UNSPECIFIED：父亲没有规定你多大
+2. EXACTLY：父亲给你设定了一个死尺寸
+3. AT_MOST：父亲规定了你的最大尺寸
 
 # View
 - mDrawingCache是一个bitmap用来缓存上一次绘制的样子，当这一帧不需要重绘时，直接用
