@@ -230,6 +230,14 @@ Complete
 ## 冷启动优化
 初步显示所用时间 (TTID) 和完全绘制所用时间 (TTFD)。TTID 是显示第一帧所用的时间，TTFD 则是应用达到可全面互动的状态所用的时间
 
+冷启动 app 进程过程：
+1.bindApplication 是整个启动过程交给应用程序的起点。
+2.attachBaseContext():最早的预加载时机
+3.installProvider()
+4.Application.onCreate()
+
+IO Wait 指发生了 IO 操作需要等待 IO 返回结果
+
 1. 视觉优化：windowBackground设置一张图片（成为StartingWindow的Decorview的背景）当应用启动时，空白启动窗口将保留在屏幕上，直到系统首次完成应用绘制。此时，系统进程会切换应用的启动窗口，让用户与应用互动。
 2. 初始化任务优化：可以异步初始化的，放异步线程初始化，必须在主线程但可以延迟初始化的，放在IdleHandler中，
 3. ContentProvider 优化：去掉没有必要的contentProvider，或者将多个ContentProvider通过startup进行串联成一个，这样可以减少contentprovider对象创建的耗时，ContentProvider 即使在没有被调用到，也会在启动阶段被自动实例化并执行相关的生命周期。在进程的初始化阶段调用完 Application 的 attachBaseContext 方法后，会再去执行 installContentProviders 方法，对当前进程的所有 ContentProvider 进行 install
