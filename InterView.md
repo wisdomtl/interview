@@ -21,8 +21,8 @@
 - binder通信的大小限制是1mb-8kb（Binder transaction buffer）,这是mmap内存映射的大小限制（单个进程），其中异步传输oneway传输限制是同步的一半（1mb-8kb）/2，内核允许Binder传输的最大限制是4M（mmap的最大空间4mb）
 - 在生成的stub中有一个asInterface():它用于将服务端的IBinder对象转换成服务接口，这种转化是区分进程的，如果客户端和服务端处于同一个进程中，此方法返回的是服务端Stub对象本身，否则新建一个远程服务的本地代理
 - 生命周期回调都是 AMS 通过 Binder 通知应用进程调用的
-- oneway表示异步调用，发起RPC之前不会构建parcel reply
-- in 表示客户端向服务端传送值并不关心值的变化，out表示服务端向客户端返回值
+- oneway表示异步调用，发起RPC之前不会构建parcel reply,oneway 是通过将 transact 方法最后一个参数设置为 FLAG_ONEWAY 实现的
+- in 表示数据只能由客户端流向服务端，out 表示数据只能由服务端流向客户端，in out 的实现是通过是否从 Parcel 对象中读写数据实现的，in 表示客户端会向parcel写入，out表示服务器会像parcel写入。
 
 ### ServiceManager
 - 在跨进程通信中，就像dns查询服务器一样，它维护了binder名和binder引用的映射关系，输入binder名输出binder引用，server向binder驱动注册服务，将别名传递给binder驱动，驱动发现是新binder则新建binder结点，再把binder别名和引用传递给 ServiceManager 保存在一张映射表进行注册，client通过别名查映射表，并获取binder引用，这是一个 binderProxy，客户单会生成一个本地代理来代理binderProxy，然后就能像调普通方法一样调用binder 方法。
