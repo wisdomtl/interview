@@ -99,7 +99,7 @@ VSS = Virtual Set Size = VSS= RSS+ 未分配实际物理内存
 	* 堆内存溢出：大图优化，监控内存泄漏
 
 ## 内存泄漏
-内存泄漏是因为堆内存无法释放
+内存泄漏导致堆内存无法释放
 android内存泄漏就是生命周期长的对象持有了生命周期较短对象的引用
 1. 静态成员变量（单例）
 	- 静态成员变量的生命周期和整个app一样，如果它持有短生命周期的对象则会导致这些对象内存泄露
@@ -132,6 +132,9 @@ ContentProvider：publish 在10秒内未完成,所以在provider.onCreate() 中s
 activity生命周期回调中sleep不会发生anr，但是此时触发触摸事件就会发生anr
 - 监听anr ：当一个进程发生ANR时，则会收到SIGQUIT信号。如果，我们能监控到系统发送的SIGQUIT信号，也许就能感知到发生了ANR，除Zygote进程外，每个进程都会创建一个SignalCatcher守护线程，用于捕获SIGQUIT、SIGUSR1信号，并采取相应的行为。
 - 过滤anr：并不是所有SIGQUIT 信号都代表anr，可以通过Looper的mMessage对象，该对象的when变量，表示的是当前正在处理的消息入队的时间，我们可以通过when变量减去当前时间，得到的就是等待时间，如果等待时间过长，就说明主线程是处于卡住的状态。这时候收到SIGQUIT信号基本上就可以认为的确发生了一次ANR
+- 通过主线程消息队列监听anr：在消息分发之前postDelay 一个runnable，当消息执行时remove掉，如果指定的delay时间内没有remove 就说明存在耗时消息
+- matrix 对编译期间产生的class进行插桩统计所有方法的耗时
+- 在主线程每个消息开始执行之前(通过printer)，在另一个线程中开启倒计时，如果任务执行超时则启动dump调用栈（Thread.getStackTrace()），这一套机制也可以不通过printer，而通过FrameCallback（当下一帧时间过长时dump）
 - 分为前台anr和后台anr：前台ANR会弹出无响应的Dialog，后台ANR会直接杀死进程
 - anr的原因在规定时间内没有完成指定任务，anr监控是通过延迟消息埋炸弹，拆炸弹，没拆成功则引爆
 - anr触发原点ActivityManagerService.appNotResponding()，ams会发送消息到主线程消息队列触发弹窗.系统进程会发signal给应用进程触发器dump堆栈。监听signal然后检测主线程消息队列头部消息的when字段（表示该消息应该被消费的时间，如果与当前时间差距很多，表示主线程阻塞）
@@ -239,7 +242,9 @@ Complete
 IO Wait 指发生了 IO 操作需要等待 IO 返回结果
 
 1. 视觉优化：windowBackground设置一张图片（成为StartingWindow的Decorview的背景）当应用启动时，空白启动窗口将保留在屏幕上，直到系统首次完成应用绘制。此时，系统进程会切换应用的启动窗口，让用户与应用互动。
-2. 初始化任务优化：可以异步初始化的，放异步线程初始化，必须在主线程但可以延迟初始化的，放在IdleHandler中，
+2. 初始化任务优化：可以异步初始化的，放异步线程初始化，必须在主线程但可以延迟初始化的，放在IdleHandler中
+3. 减少启动进程&线程：低端手机内存有限多进程会导致gc，多线程也会占用内存以及cpu资源，对策是应用使用统一多线程入口，对于三方库通过hook使用统一线程库。
+4. splash & main合并：将这两个activity合并成一个，减少一个对象已经各自生命周期回调，通过两个fragment实现。
 3. ContentProvider 优化：去掉没有必要的contentProvider，或者将多个ContentProvider通过startup进行串联成一个，这样可以减少contentprovider对象创建的耗时，ContentProvider 即使在没有被调用到，也会在启动阶段被自动实例化并执行相关的生命周期。在进程的初始化阶段调用完 Application 的 attachBaseContext 方法后，会再去执行 installContentProviders 方法，对当前进程的所有 ContentProvider 进行 install
 4. 缩小main dex：MultidexTransform 解析所有manifest中声明的组件生成manifest_keep.txt，再查找manifest_keep.txt中所有类的直接引用类，将其保存在maindexlist.txt中，最后将maindexlist.txt中的所有class编译进main.dex。multiDex优化，自行解析AndroidManifest，自定义main.dex生成逻辑，将和启动页相关的代码分在主dex中，减小主dex大小，加快加载速度。
 5. multiDex.install 优化：
