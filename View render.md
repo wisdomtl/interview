@@ -13,7 +13,7 @@
 
 ## requestLayout()和invalidate()
 - 其实两个函数都会自底向上传递到顶层视图ViewRootImpl中
-- requestLayout()必定会出发measure和layout，如果前两个过程中view大小发生变化，则会出发draw，而invalidate()只会出发draw
+- requestLayout()必定会触发measure和layout，如果前两个过程中view大小发生变化，则会触发draw，而invalidate()只会出发draw
 - invalidate表示当前控件需要重绘，会标记PFLAG_INVALIDATED标记，不管是软件绘制还是硬件绘制都会设置重绘区域。对于硬件绘制只有被置了标记位的控件才会重绘，软件绘制整个view树都要重绘。
 - View.measure()和View.layout()会先检查是否有PFLAG_FORCE_LAYOUT标记，如果有则进行测量和定位（requestlayout会置这个标标记位）
 - postInvalidate 向主线程发送了一个INVALIDATE的消息
@@ -88,4 +88,4 @@ MeasureSpec用于在View测量过程中描述尺寸，它是一个包含了布�
 
 # ConstraintLayout
 - 额外的封装，会将容器控件包装成ConstraintWidgetContainer，子控件包装成ConstraintWidget
-- 在测量布局的时候，会想把所有的ConstraintWidget移除，然后遍历所有子控件并重新添加ConstraintWidget，如果子控件有约束则将其连接到锚点，构建依赖图，深度遍历依赖图，进行求解（Cassowary 算法），最终得到相对于父亲的上下左右。
+- 在测量布局的时候，会先把所有的ConstraintWidget移除，然后遍历所有子控件并重新添加ConstraintWidget，如果子控件有约束则将其连接到锚点，构建依赖图，深度遍历依赖图，进行求解（Cassowary 算法），最终得到相对于父亲的上下左右。

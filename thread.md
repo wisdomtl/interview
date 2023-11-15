@@ -219,7 +219,7 @@ StoreLoad Store1; StoreLoad; Load2  确保Store1数据对其他处理器变得�
 - 适合读多写少，因为写需要复制数组，耗时
 - 适合集合不大，因为写时要复制数组，耗时，耗内存
 - 实时性要求不高，因为可能会读到旧数据。(对新数组写，对数组读)
-- 采用快照遍历，即遍历发起时形成一张当前数组的快照，并且迭代器不允许删除，新增元素。不会发生 ConcurrentModificationException，但可能实时性不够。
+- 采用快照遍历，即遍历发起时形成一张当前数组的快照，并且迭代器不允许删除，新增元素。不会发生ConcurrentModificationException，但可能实时性不够。
 - 适用于作为观察者的容器
 
 ### `ArrayBlockingQueue`
