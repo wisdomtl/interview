@@ -93,7 +93,7 @@ SurfaceView做帧大图帧动画，优化内存和流畅度：
 # Choreographer
 - 将和ui相关的任务与vsync同步的一个类。
 - 每个任务被抽象成CallbackRecord，同类任务按时间先后顺序组成一条任务链CallbackQueue。四条任务链存放在mCallbackQueues[]数组结构中
-- 触摸事件，动画，View树遍历都会被抛到编舞者，并被包装成CallbackRecord并存入链式数组结构，当Choreographer收到一个Vsync就会依次从输入，动画，绘制这些链中取出任务执行
+- 触摸事件，动画，View树遍历都会被抛到编舞者，并被包装成CallbackRecord并存入链式数组结构。
 - 当vsync到来时，会向主线程抛异步消息（执行doFrame）并带上消息生成时间，当异步消息被执行时，从任务链上摘取所有以前的任务，并按时间先后顺序逐个执行。
 - 当绘制任务耗时，会发生跳帧，即本该绘制的任务被跳过（通过异步消息生成时间和上一帧绘制时间比较，小于上一帧时间则跳过重新订阅vsync），commit任务会在绘制任务执行完后进行帧时间对齐，如果绘制任务时间超过2个帧，则将上一帧时间往后延，目的是跳过旧帧。
 - 订阅下一个信号，也被一个被抛到主线程runnable，前序任务执行时间过长，可能会错过订阅时间点
@@ -144,8 +144,7 @@ SurfaceView做帧大图帧动画，优化内存和流畅度：
 6. 检测新起activity对应的应用进程是否已创建，若没有则让zygote fork一个新进程
 7. 应用进程中创建ActivityThread.main(),开启主线程消息循环
 8. SystemServer给应用进程主线程发消息要求创建并启动主activity
-9. 通过跨进程通信触发activity的各种生命周期回调
-10. 到onResume的时候会将顶层视图添加到窗口，并构建viewrootimpl，以此触发一次view树遍历
+9. 通过跨进程通信触发activity的各种生命周期回调，onAttach时创建window，oncreate时创建decorview，onResume时将decorView添加到窗口，并构建viewrootimpl，以此触发一次view树遍历
 
 ### 版本2
 1. ams 通知zygote fork一个app进程
